@@ -1,0 +1,100 @@
+// ─── data/scheduleData.js ─────────────────────────────────────────────────────
+// Full weekly schedule. Each day has an exercises array.
+// Sunday is a rest day (no exercises).
+
+export const WEEK = [
+  {
+    id:       'MON',
+    label:    'MON',
+    fullName: 'Monday',
+    type:     'Upper Body Strength',
+    isRest:   false,
+    exercises: [
+      { id: 'm1', name: 'Barbell Bench Press',    sets: 4, reps: '8–10', icon: 'weight-lifter'  },
+      { id: 'm2', name: 'Pull Ups',               sets: 4, reps: '6–10', icon: 'human-handsup'  },
+      { id: 'm3', name: 'Dumbbell Shoulder Press',sets: 3, reps: '8–12', icon: 'dumbbell'       },
+      { id: 'm4', name: 'Barbell Bent Over Row',  sets: 3, reps: '8–12', icon: 'weight-lifter'  },
+      { id: 'm5', name: 'Dumbbell Lateral Raise', sets: 3, reps: '12–15',icon: 'dumbbell'       },
+      { id: 'm6', name: 'Tricep Pushdown',        sets: 3, reps: '12–15',icon: 'arm-flex'       },
+    ],
+  },
+  {
+    id:       'TUE',
+    label:    'TUE',
+    fullName: 'Tuesday',
+    type:     'Lower Body Strength',
+    isRest:   false,
+    exercises: [
+      { id: 't1', name: 'Barbell Back Squat',     sets: 4, reps: '6–8',  icon: 'run-fast'       },
+      { id: 't2', name: 'Romanian Deadlift',      sets: 3, reps: '8–10', icon: 'weight-lifter'  },
+      { id: 't3', name: 'Leg Press',              sets: 3, reps: '10–12',icon: 'run-fast'       },
+      { id: 't4', name: 'Leg Curl',               sets: 3, reps: '10–12',icon: 'run-fast'       },
+      { id: 't5', name: 'Standing Calf Raise',    sets: 4, reps: '15–20',icon: 'run'            },
+    ],
+  },
+  {
+    id:       'WED',
+    label:    'WED',
+    fullName: 'Wednesday',
+    type:     'Push Day',
+    isRest:   false,
+    exercises: [
+      { id: 'w1', name: 'Incline Bench Press',    sets: 4, reps: '8–10', icon: 'weight-lifter'  },
+      { id: 'w2', name: 'Overhead Press',         sets: 3, reps: '8–10', icon: 'dumbbell'       },
+      { id: 'w3', name: 'Cable Fly',              sets: 3, reps: '12–15',icon: 'dumbbell'       },
+      { id: 'w4', name: 'Lateral Raise',          sets: 3, reps: '12–15',icon: 'dumbbell'       },
+      { id: 'w5', name: 'Skull Crushers',         sets: 3, reps: '10–12',icon: 'arm-flex'       },
+      { id: 'w6', name: 'Tricep Dips',            sets: 3, reps: '10–12',icon: 'arm-flex'       },
+    ],
+  },
+  {
+    id:       'THU',
+    label:    'THU',
+    fullName: 'Thursday',
+    type:     'Pull Day',
+    isRest:   false,
+    exercises: [
+      { id: 'th1', name: 'Deadlift',              sets: 4, reps: '5–6',  icon: 'weight-lifter'  },
+      { id: 'th2', name: 'Bent Over Row',         sets: 3, reps: '8–10', icon: 'weight-lifter'  },
+      { id: 'th3', name: 'Lat Pulldown',          sets: 3, reps: '10–12',icon: 'human-handsup'  },
+      { id: 'th4', name: 'Face Pull',             sets: 3, reps: '15–20',icon: 'dumbbell'       },
+      { id: 'th5', name: 'Barbell Curl',          sets: 3, reps: '10–12',icon: 'arm-flex'       },
+    ],
+  },
+  {
+    id:       'FRI',
+    label:    'FRI',
+    fullName: 'Friday',
+    type:     'Full Body Strength',
+    isRest:   false,
+    exercises: [
+      { id: 'f1', name: 'Front Squat',            sets: 4, reps: '6–8',  icon: 'run-fast'       },
+      { id: 'f2', name: 'Bench Press',            sets: 4, reps: '8–10', icon: 'weight-lifter'  },
+      { id: 'f3', name: 'Pull Ups',               sets: 3, reps: '6–10', icon: 'human-handsup'  },
+      { id: 'f4', name: 'Dumbbell Lunge',         sets: 3, reps: '10–12',icon: 'run-fast'       },
+      { id: 'f5', name: 'Arnold Press',           sets: 3, reps: '10–12',icon: 'dumbbell'       },
+      { id: 'f6', name: 'Cable Row',              sets: 3, reps: '10–12',icon: 'weight-lifter'  },
+    ],
+  },
+  {
+    id:       'SAT',
+    label:    'SAT',
+    fullName: 'Saturday',
+    type:     'Core & Cardio',
+    isRest:   false,
+    exercises: [
+      { id: 's1', name: 'Plank',                  sets: 3, reps: '60 sec',icon: 'yoga'          },
+      { id: 's2', name: 'Russian Twists',         sets: 3, reps: '20',   icon: 'yoga'           },
+      { id: 's3', name: 'Hanging Leg Raise',      sets: 3, reps: '12–15',icon: 'human-handsup'  },
+      { id: 's4', name: 'Treadmill Run',          sets: 1, reps: '20 min',icon: 'run'           },
+    ],
+  },
+  {
+    id:       'SUN',
+    label:    'SUN',
+    fullName: 'Sunday',
+    type:     'Rest Day',
+    isRest:   true,
+    exercises: [],
+  },
+];

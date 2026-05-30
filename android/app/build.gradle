@@ -78,6 +78,13 @@ android {
     compileSdk rootProject.ext.compileSdkVersion
 
     namespace "com.gymbro"
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    kotlinOptions {
+        jvmTarget = "17"
+    }
     defaultConfig {
         applicationId "com.gymbro"
         minSdkVersion rootProject.ext.minSdkVersion
@@ -117,3 +124,6 @@ dependencies {
         implementation jscFlavor
     }
 }
+
+// Copy react-native-vector-icons fonts into Android assets
+apply from: "../../node_modules/react-native-vector-icons/fonts.gradle"
