@@ -2,24 +2,164 @@
 // Entry point for the Home tab.
 // All UI logic is delegated to focused components; this file only composes them.
 
-import React from 'react';
-import { ScrollView, StatusBar, StyleSheet } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 
 import { C }                from './Theme';
-import { SCHEDULE, WEIGHTS } from './Homedata';
 
 import NavHeader        from '../../components/NavHeader';
 import GreetingSection  from './components/GreetingSection';
-import GymScheduleCard  from './components/GymScheduleCard';
+import DayCard          from '../ScheduleScreen/components/Daycard';
+import DaySelector      from '../ScheduleScreen/components/Dayselector';
+import WeekSelector     from '../ScheduleScreen/components/Weekselector';
 import SavedWeightsCard from './components/Savedweightscard';
+import { fetchLatestUserRecords } from '../../FireBase/records';
+
+const DAY_LABELS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
+const DAY_NAMES = {
+  SUN: 'Sunday',
+  MON: 'Monday',
+  TUE: 'Tuesday',
+  WED: 'Wednesday',
+  THU: 'Thursday',
+  FRI: 'Friday',
+  SAT: 'Saturday',
+};
+
+const DAY_OPTIONS = DAY_LABELS.map((day) => ({ id: day, label: day }));
+const WEEK_OPTIONS = [
+  { id: 'W1', label: 'Week 1' },
+  { id: 'W2', label: 'Week 2' },
+  { id: 'W3', label: 'Week 3' },
+  { id: 'W4', label: 'Week 4' },
+];
+
+const muscleIcons = {
+  Chest: 'dumbbell',
+  Back: 'human-handsup',
+  Shoulders: 'arm-flex',
+  Biceps: 'arm-flex',
+  Triceps: 'arm-flex',
+  Quads: 'run-fast',
+  Hamstrings: 'run-fast',
+  Glutes: 'run-fast',
+  Core: 'yoga',
+  Cardio: 'run',
+  'Full Body': 'weight-lifter',
+};
+
+const getTodayDayId = () => DAY_LABELS[new Date().getDay()];
+
+const buildDayCards = (records) => {
+  const groupedByDay = DAY_LABELS.reduce((acc, dayId) => {
+    acc[dayId] = [];
+    return acc;
+  }, {});
+
+  records.forEach((record) => {
+    const dayKey = DAY_LABELS.includes(record.dayOfWeek) ? record.dayOfWeek : 'MON';
+
+    groupedByDay[dayKey].push(record);
+  });
+
+  return DAY_LABELS.reduce((acc, dayId) => {
+    const exercises = groupedByDay[dayId].map((record) => ({
+      id: record.id,
+      name: record.name,
+      sets: record.sets,
+      reps: record.reps,
+      icon: muscleIcons[record.muscleGroup] || 'dumbbell',
+    }));
+
+    acc[dayId] = {
+      id: dayId,
+      fullName: DAY_NAMES[dayId],
+      type: exercises.length > 0 ? `${exercises.length} Exercise${exercises.length !== 1 ? 's' : ''}` : 'Rest Day',
+      isRest: exercises.length === 0,
+      exercises,
+    };
+
+    return acc;
+  }, {});
+};
+
+const buildWeekCards = (records) => {
+  const groupedByWeek = WEEK_OPTIONS.reduce((acc, week) => {
+    acc[week.id] = [];
+    return acc;
+  }, {});
+
+  records.forEach((record) => {
+    const weekNumber = Number(record.week) || 1;
+    const weekKey = `W${Math.min(Math.max(weekNumber, 1), 4)}`;
+    groupedByWeek[weekKey].push(record);
+  });
+
+  return WEEK_OPTIONS.reduce((acc, week) => {
+    acc[week.id] = buildDayCards(groupedByWeek[week.id]);
+    return acc;
+  }, {});
+};
+
+const buildWeightPreview = (records) =>
+  records.map((record, index) => ({
+    title: record.name,
+    equipment: record.muscleGroup || 'Workout',
+    sets: `${record.repMax ?? 1} RM`,
+    weight: `${record.weight} ${record.unit || ''}`.trim(),
+    icon: record.icon || 'weight-lifter',
+    setsColor: index % 2 === 0 ? C.purpleSoft : C.purple,
+  }));
 
 export default function HomeScreen() {
+  const tabBarHeight = useBottomTabBarHeight();
+  const [weekCards, setWeekCards] = useState({});
+  const [selectedWeek, setSelectedWeek] = useState('W1');
+  const [selectedDay, setSelectedDay] = useState(getTodayDayId());
+  const [weights, setWeights] = useState([]);
+
+  useEffect(() => {
+    let isActive = true;
+
+    const loadHomeData = async () => {
+      try {
+        const [exerciseRecords, prRecords] = await Promise.all([
+          fetchLatestUserRecords('exerciseRecords', 100),
+          fetchLatestUserRecords('prRecords', 3),
+        ]);
+
+        if (!isActive) {
+          return;
+        }
+
+        const cardsByWeek = buildWeekCards([...exerciseRecords].reverse());
+
+        setWeekCards(cardsByWeek);
+        setWeights(buildWeightPreview(prRecords));
+      } catch (error) {
+        console.log('Failed to load home data:', error?.message ?? error);
+      }
+    };
+
+    loadHomeData();
+
+    return () => {
+      isActive = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    const currentWeekCards = weekCards[selectedWeek] || {};
+    const firstAvailableDay = DAY_LABELS.find((day) => currentWeekCards[day]?.exercises?.length > 0);
+
+    if (firstAvailableDay) {
+      setSelectedDay(firstAvailableDay);
+    }
+  }, [selectedWeek, weekCards]);
+
   // ── Handlers (wire to navigation / state as needed) ──────────────────────
-  const handleMenu        = () => console.log('Menu pressed');
-  const handleCalendar    = () => console.log('Calendar pressed');
-  const handleWeekFilter  = () => console.log('Week filter pressed');
-  const handleNextWeek    = () => console.log('View next week');
   const handleViewAll     = () => console.log('View all weights');
   const handleAddExercise = () => console.log('Add exercise');
   const handleWeightRow   = (item) => console.log('Weight row pressed:', item.title);
@@ -32,15 +172,16 @@ export default function HomeScreen() {
       {/* ① Top bar */}
       <NavHeader
         title="My Plan"
-        onLeftPress={handleMenu}
-        rightIcon="calendar-month-outline"
-        onRightPress={handleCalendar}
+        onLeftPress={() => console.log('Menu pressed')}
       />
 
       {/* ② Scrollable content */}
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: tabBarHeight + 16 },
+        ]}
         showsVerticalScrollIndicator={false}
       >
         {/* ③ Greeting */}
@@ -49,16 +190,40 @@ export default function HomeScreen() {
           subtitle="Stay consistent and crush your goals."
         />
 
-        {/* ④ Weekly gym schedule */}
-        <GymScheduleCard
-          schedule={SCHEDULE}
-          onWeekFilter={handleWeekFilter}
-          onNextWeek={handleNextWeek}
+        {/* ④ Week + day workout */}
+        <View style={styles.sectionLabelRow}>
+          <Text style={styles.sectionLabel}>Workout Plan</Text>
+        </View>
+
+        <WeekSelector
+          weeks={WEEK_OPTIONS}
+          activeWeek={selectedWeek}
+          onWeekPress={setSelectedWeek}
         />
+
+        <DaySelector
+          days={DAY_OPTIONS}
+          activeDay={selectedDay}
+          onDayPress={setSelectedDay}
+        />
+
+        {(weekCards[selectedWeek] || {})[selectedDay] ? (
+          <DayCard
+            day={(weekCards[selectedWeek] || {})[selectedDay]}
+            expanded
+            onToggle={() => {}}
+            onExOptions={(item) => console.log('Options for:', item.name)}
+          />
+        ) : (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No exercise for this day</Text>
+            <Text style={styles.emptyText}>Add an exercise in the Add screen and pick a day to see it here.</Text>
+          </View>
+        )}
 
         {/* ⑤ Saved weights */}
         <SavedWeightsCard
-          weights={WEIGHTS}
+          weights={weights}
           onViewAll={handleViewAll}
           onAddExercise={handleAddExercise}
           onRowPress={handleWeightRow}
@@ -79,6 +244,32 @@ const styles = StyleSheet.create({
   scrollContent: {
     paddingHorizontal: 16,
     paddingTop: 4,
-    paddingBottom: 8,
+  },
+  sectionLabelRow: {
+    paddingHorizontal: 4,
+    marginTop: 8,
+    marginBottom: 10,
+  },
+  sectionLabel: {
+    color: C.white,
+    fontSize: 16,
+    fontWeight: '700',
+  },
+  emptyCard: {
+    backgroundColor: C.card,
+    borderRadius: 20,
+    padding: 18,
+    marginBottom: 16,
+  },
+  emptyTitle: {
+    color: C.white,
+    fontSize: 15,
+    fontWeight: '700',
+    marginBottom: 6,
+  },
+  emptyText: {
+    color: C.gray,
+    fontSize: 13,
+    lineHeight: 18,
   },
 });

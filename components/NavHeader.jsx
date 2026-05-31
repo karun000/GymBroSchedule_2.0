@@ -1,7 +1,7 @@
 // ─── components/NavHeader.jsx ─────────────────────────────────────────────────
 // Shared top navigation header for screens.
 
-import React from 'react';
+import React, { useContext } from 'react';
 import {
   View,
   Text,
@@ -11,6 +11,7 @@ import {
   StatusBar,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { DrawerContext } from '../context/DrawerContext';
 
 const DEFAULT_COLORS = {
   white: '#FFFFFF',
@@ -29,16 +30,30 @@ export default function NavHeader({
   colors = DEFAULT_COLORS,
 }) {
   const { white, gray, purple } = { ...DEFAULT_COLORS, ...colors };
+  const drawer = useContext(DrawerContext);
 
   return (
     <View style={styles.container}>
       <View style={styles.topRow}>
         <TouchableOpacity
-          onPress={onLeftPress}
+          onPress={() => {
+            // open global drawer, then call provided handler
+            if (drawer?.open) drawer.open();
+            if (typeof onLeftPress === 'function') onLeftPress();
+          }}
           hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
         >
           <Icon name={leftIcon} size={26} color={white} />
         </TouchableOpacity>
+
+        {title ? (
+          <View style={styles.titleRow}>
+            <Text style={[styles.title, { color: white }]}>{title}</Text>
+            {subtitle ? (
+              <Text style={[styles.subtitle, { color: gray }]}>{subtitle}</Text>
+            ) : null}
+          </View>
+        ) : null}
 
         {onRightPress ? (
           <TouchableOpacity
@@ -60,14 +75,7 @@ export default function NavHeader({
         )}
       </View>
 
-      {title ? (
-        <View style={styles.titleRow}>
-          <Text style={[styles.title, { color: white }]}>{title}</Text>
-          {subtitle ? (
-            <Text style={[styles.subtitle, { color: gray }]}>{subtitle}</Text>
-          ) : null}
-        </View>
-      ) : null}
+
     </View>
   );
 }
@@ -75,7 +83,7 @@ export default function NavHeader({
 const styles = StyleSheet.create({
   container: {
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? 8 : 6,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 24) : 8,
     paddingBottom: 12,
     gap: 6,
   },

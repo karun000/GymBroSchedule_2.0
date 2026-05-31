@@ -3,7 +3,16 @@ export const WEEKS = [
   { id: 2, label: 'W2' },
   { id: 3, label: 'W3' },
   { id: 4, label: 'W4' },
-  { id: 5, label: 'W5' },
+];
+
+export const DAYS_OF_WEEK = [
+  { id: 'MON', label: 'MON' },
+  { id: 'TUE', label: 'TUE' },
+  { id: 'WED', label: 'WED' },
+  { id: 'THU', label: 'THU' },
+  { id: 'FRI', label: 'FRI' },
+  { id: 'SAT', label: 'SAT' },
+  { id: 'SUN', label: 'SUN' },
 ];
 
 export const MUSCLE_GROUPS = [
@@ -37,25 +46,4 @@ export const REPS_OPTIONS = [
   '12-15',
   '15-20',
   'AMRAP',
-];
-
-export const INITIAL_WEEK3_EXERCISES = [
-  {
-    id: '1',
-    name: 'Bench Press',
-    muscleGroup: 'Chest',
-    equipment: 'Barbell',
-  },
-  {
-    id: '2',
-    name: 'Incline Dumbbell Fly',
-    muscleGroup: 'Chest',
-    equipment: null,
-  },
-  {
-    id: '3',
-    name: 'Push-ups',
-    muscleGroup: 'Bodyweight',
-    equipment: null,
-  },
 ];

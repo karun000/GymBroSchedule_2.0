@@ -86,6 +86,18 @@ You've successfully run and modified your React Native App. :partying_face:
 
 If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
 
+## Firebase
+
+This app saves records to Firestore under the signed-in user's document.
+
+If you see "missing or insufficient permissions", deploy the Firestore rules from this repo to your Firebase project:
+
+```sh
+firebase deploy --only firestore:rules
+```
+
+The rules live in [firestore.rules](firestore.rules) and allow each signed-in user to read and write only their own records.
+
 # Learn More
 
 To learn more about React Native, take a look at the following resources:

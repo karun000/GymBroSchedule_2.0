@@ -1,8 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import Animated from 'react-native-reanimated';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import Theme from './Theme';
+import Theme from '../Theme';
 
 const getIcon = ({ equipment, muscleGroup }) => {
   const eq = (equipment || '').toLowerCase();
@@ -19,30 +18,11 @@ const getSubtitle = ({ muscleGroup, equipment }) => {
   return parts.join(' | ');
 };
 
-/**
- * ExerciseListItem
- *
- * Props:
- *  - exercise       : exercise object
- *  - index          : current position (0-based), used for the number label
- *  - isDragging     : bool — true while this item is being dragged
- *  - dragHandleProps: spread onto the drag handle (from DraggableList)
- *  - onMenuPress    : called with exercise.id
- */
-const ExerciseListItem = ({ exercise, index, isDragging, dragHandleProps, onMenuPress }) => (
-  <Animated.View
-    style={[
-      styles.row,
-      isDragging && styles.rowDragging,
-    ]}
-  >
-    {/* Drag handle — receives the pan gesture responder */}
-    <View style={styles.handle} {...dragHandleProps}>
-      <Icon
-        name="drag-vertical"
-        size={22}
-        color={isDragging ? Theme.colors.primary : Theme.colors.textMuted}
-      />
+const ExerciseListItem = ({ exercise, index, onMenuPress }) => (
+  <View style={styles.row}>
+    {/* Drag handle (visual only) */}
+    <View style={styles.handle}>
+      <Icon name="drag-vertical" size={22} color={Theme.colors.textMuted} />
     </View>
 
     {/* Text */}
@@ -65,7 +45,7 @@ const ExerciseListItem = ({ exercise, index, isDragging, dragHandleProps, onMenu
         <Icon name="dots-vertical" size={18} color={Theme.colors.textMuted} />
       </TouchableOpacity>
     </View>
-  </Animated.View>
+  </View>
 );
 
 const styles = StyleSheet.create({
@@ -78,20 +58,9 @@ const styles = StyleSheet.create({
     borderBottomColor: Theme.colors.divider,
     backgroundColor: Theme.colors.card,
   },
-  rowDragging: {
-    backgroundColor: Theme.colors.cardBorder,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.35,
-    shadowRadius: 8,
-    elevation: 10,
-    borderRadius: Theme.radius.sm,
-    borderBottomWidth: 0,
-  },
   handle: {
     marginRight: 6,
-    paddingHorizontal: 2,
-    paddingVertical: 4,
+    opacity: 0.6,
   },
   info: {
     flex: 1,

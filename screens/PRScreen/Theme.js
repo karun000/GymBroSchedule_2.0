@@ -1,0 +1,48 @@
+const Theme = {
+  colors: {
+    background: '#0D0B1E',
+    surface: '#141228',
+    card: '#1A1730',
+    cardBorder: '#252240',
+    inputBg: '#1A1730',
+    inputBorder: '#252240',
+    primary: '#7C3AED',
+    primaryDark: '#5B21B6',
+    primaryGlow: 'rgba(124, 58, 237, 0.25)',
+    weekActive: '#7C3AED',
+    weekInactive: '#1A1730',
+    text: '#FFFFFF',
+    textSub: '#9B99B5',
+    textMuted: '#5A5878',
+    divider: '#1F1D35',
+    iconMuted: '#9B99B5',
+    repActive: '#7C3AED',
+    repInactive: '#1A1730',
+    trendArrow: '#7C3AED',
+  },
+  spacing: {
+    xs: 4,
+    sm: 8,
+    md: 12,
+    lg: 16,
+    xl: 20,
+    xxl: 24,
+  },
+  radius: {
+    sm: 8,
+    md: 12,
+    lg: 16,
+    full: 999,
+  },
+  font: {
+    xs: 11,
+    sm: 12,
+    md: 13,
+    base: 14,
+    lg: 15,
+    xl: 16,
+    title: 17,
+  },
+};
+
+export default Theme;

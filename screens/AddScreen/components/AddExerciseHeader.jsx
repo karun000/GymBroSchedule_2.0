@@ -1,13 +1,10 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import Theme from './Theme';
+import Theme from '../Theme';
 
 const AddExerciseHeader = ({ onBack }) => (
   <View style={styles.container}>
-    <TouchableOpacity onPress={onBack} style={styles.back} activeOpacity={0.7}>
-      <Icon name="chevron-left" size={28} color={Theme.colors.text} />
-    </TouchableOpacity>
     <Text style={styles.title}>ADD EXERCISE</Text>
     <View style={styles.spacer} />
   </View>

@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import Theme from './Theme';
+import Theme from '../Theme';
 
 const WeekSelector = ({ weeks, selectedWeek, exerciseCount, onSelect }) => (
   <View style={styles.wrapper}>
