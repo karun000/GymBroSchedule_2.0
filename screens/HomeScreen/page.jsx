@@ -290,6 +290,8 @@ export default function HomeScreen() {
             expanded
             onToggle={() => {}}
             onExOptions={(item) => console.log('Options for:', item.name)}
+            showExpandIcon={false}
+            showMoreIcon={false}
           />
         ) : visibleWeekOptions.length > 0 ? (
           <View style={styles.emptyCard}>

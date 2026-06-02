@@ -39,9 +39,9 @@ const BodyPartInput = ({ label, value, unit, onChangeValue, onChangeUnit }) => (
 /* ─── Main form ─── */
 const AddMeasurementForm = ({ selectedDateLabel, onSave, initialMeasurements }) => {
   const [height, setHeight]           = useState(initialMeasurements?.height ?? '102');
-  const [heightUnit, setHeightUnit]   = useState(initialMeasurements?.heightUnit ?? 'cm');
+  const [heightUnit, setHeightUnit]   = useState(initialMeasurements?.heightUnit ?? 'ft');
   const [weight, setWeight]           = useState(initialMeasurements?.weight ?? '');
-  const [weightUnit, setWeightUnit]   = useState(initialMeasurements?.weightUnit ?? 'lbs');
+  const [weightUnit, setWeightUnit]   = useState(initialMeasurements?.weightUnit ?? 'kg');
 
   const [bodyParts, setBodyParts] = useState(initialMeasurements?.bodyParts ?? INITIAL_MEASUREMENTS);
   const [saving, setSaving] = useState(false);
@@ -107,7 +107,7 @@ const AddMeasurementForm = ({ selectedDateLabel, onSave, initialMeasurements }) 
         {/* Secondary unit label display */}
         <View style={styles.altUnitBox}>
           <Text style={styles.altUnitText}>
-            {heightUnit === 'cm' ? 'in' : 'cm'}
+            {heightUnit === 'cm' ? 'in' : heightUnit === 'in' ? 'ft' : 'cm'}
           </Text>
         </View>
       </View>

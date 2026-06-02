@@ -36,6 +36,7 @@ export default function NavHeader({
     <View style={styles.container}>
       <View style={styles.topRow}>
         <TouchableOpacity
+          style={styles.leftButton}
           onPress={() => {
             // open global drawer, then call provided handler
             if (drawer?.open) drawer.open();
@@ -91,6 +92,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    minHeight: 48,
   },
   rightButton: {
     flexDirection: 'row',
@@ -102,10 +104,12 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   rightSpacer: {
-    width: 26,
+    width: 34,
   },
   titleRow: {
-    marginTop: 4,
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   title: {
     fontSize: 28,
@@ -114,6 +118,11 @@ const styles = StyleSheet.create({
   },
   subtitle: {
     fontSize: 13,
-    marginTop: 3,
+    marginTop: 2,
+  },
+  leftButton: {
+    width: 34,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 });

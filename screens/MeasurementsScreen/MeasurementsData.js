@@ -6,7 +6,7 @@ export const WEEKS = [
   { id: 5, label: 'W5' },
 ];
 
-export const HEIGHT_UNITS = ['cm', 'in'];
+export const HEIGHT_UNITS = ['cm', 'in', 'ft'];
 export const WEIGHT_UNITS = ['lbs', 'kg'];
 export const BODY_PART_UNITS = ['cm', 'in'];
 
@@ -27,17 +27,17 @@ export const BODY_PARTS = [
 ];
 
 export const INITIAL_MEASUREMENTS = {
-  chest:  { value: '102', unit: 'cm' },
-  waist:  { value: '85',  unit: 'cm' },
-  hips:   { value: '100', unit: 'cm' },
-  hipsR:  { value: '100', unit: 'cm' },
-  bicepL: { value: '35',  unit: 'cm' },
-  bicepR: { value: '35',  unit: 'cm' },
-  thighL: { value: '35',  unit: 'cm' },
-  thighR: { value: '35',  unit: 'cm' },
-  calvesL: { value: '35',  unit: 'cm' },
-  calvesR: { value: '35',  unit: 'cm' },
-  forearmsL: { value: '25',  unit: 'cm' },
-  forearmsR: { value: '25',  unit: 'cm' },
-  back: { value: '45',  unit: 'cm' },
+  chest:  { value: '102', unit: 'in' },
+  waist:  { value: '85',  unit: 'in' },
+  hips:   { value: '100', unit: 'in' },
+  hipsR:  { value: '100', unit: 'in' },
+  bicepL: { value: '35',  unit: 'in' },
+  bicepR: { value: '35',  unit: 'in' },
+  thighL: { value: '35',  unit: 'in' },
+  thighR: { value: '35',  unit: 'in' },
+  calvesL: { value: '35',  unit: 'in' },
+  calvesR: { value: '35',  unit: 'in' },
+  forearmsL: { value: '25',  unit: 'in' },
+  forearmsR: { value: '25',  unit: 'in' },
+  back: { value: '45',  unit: 'in' },
 };

@@ -50,10 +50,10 @@ const PickerModal = ({ visible, title, options, onSelect, onClose }) => (
 
 /* ─── Main Form ─── */
 const NewPRForm = ({ onLog }) => {
-  const [exerciseName, setExerciseName] = useState('Bench Press');
+  const [exerciseName, setExerciseName] = useState('');
   const [muscleGroup, setMuscleGroup]   = useState('Chest');
-  const [maxWeight, setMaxWeight]       = useState('225');
-  const [unit, setUnit]                 = useState('lbs');
+  const [maxWeight, setMaxWeight]       = useState('');
+  const [unit, setUnit]                 = useState('kg');
   const [repMax, setRepMax]             = useState(1);
   const [selectedDate, setSelectedDate] = useState(null);
   const [saving, setSaving] = useState(false);

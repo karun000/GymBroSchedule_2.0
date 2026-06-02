@@ -12,6 +12,6 @@ export const MUSCLE_GROUPS = [
   'Full Body',
 ];
 
-export const REP_OPTIONS = [1, 3, 5, 'etc'];
+export const REP_OPTIONS = [1,2, 3,4, 5, 'etc'];
 
 export const UNIT_OPTIONS = ['lbs', 'kg'];

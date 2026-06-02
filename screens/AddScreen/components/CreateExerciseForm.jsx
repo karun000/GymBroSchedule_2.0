@@ -51,10 +51,10 @@ const PickerModal = ({ visible, title, options, onSelect, onClose }) => (
 
 /* ─── Main Form ─── */
 const CreateExerciseForm = ({ selectedWeek, selectedDay, onDayChange, onAdd }) => {
-  const [name, setName]           = useState('Dumbbell Press');
+  const [name, setName]           = useState('');
   const [muscle, setMuscle]       = useState('Chest');
   const [equipment, setEquipment] = useState('Dumbbells');
-  const [sets, setSets]           = useState('4');
+  const [sets, setSets]           = useState('3');
   const [reps, setReps]           = useState('10-12');
   const [saving, setSaving]       = useState(false);
 

@@ -422,7 +422,7 @@ const MeasurementsScreenPage = ({ navigation, route }) => {
             <ScrollView showsVerticalScrollIndicator={false} keyboardShouldPersistTaps="handled">
               <DateSelector selectedDate={selectedDate} onSelect={setSelectedDate} />
               <AddMeasurementForm
-                key={`${formMode}-${activeMeasurement?.id ?? 'new'}`}
+                key={`${formMode}-${activeMeasurement?.id ?? (formMode === 'add' ? (measurementHistory[0]?.id ?? 'new') : 'new')}`}
                 selectedDateLabel={formatDateLabel(selectedDate.toISOString())}
                 initialMeasurements={
                   formMode === 'edit' && activeMeasurement
@@ -432,6 +432,14 @@ const MeasurementsScreenPage = ({ navigation, route }) => {
                         weight: activeMeasurement.weight,
                         weightUnit: activeMeasurement.weightUnit,
                         bodyParts: activeMeasurement.bodyParts,
+                      }
+                    : formMode === 'add' && measurementHistory.length > 0
+                    ? {
+                        height: measurementHistory[0].height,
+                        heightUnit: measurementHistory[0].heightUnit,
+                        weight: measurementHistory[0].weight,
+                        weightUnit: measurementHistory[0].weightUnit,
+                        bodyParts: measurementHistory[0].bodyParts,
                       }
                     : null
                 }

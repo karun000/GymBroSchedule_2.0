@@ -41,14 +41,6 @@ function ScheduleRow({ item }) {
         <Text style={styles.workoutSub}>{item.subtitle}</Text>
       </View>
 
-      {/* Check circle */}
-      {item.done ? (
-        <View style={styles.checkFilled}>
-          <Icon name="check" size={13} color={C.white} />
-        </View>
-      ) : (
-        <View style={[styles.checkEmpty, accent && styles.checkEmptyActive]} />
-      )}
     </View>
   );
 }
@@ -103,7 +95,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingTop: 16,
     paddingBottom: 4,
-    marginBottom: 16,
+    marginBottom: 24,
   },
 
   // Card header
@@ -167,23 +159,6 @@ const styles = StyleSheet.create({
   workoutInfo:      { flex: 1 },
   workoutTitle:     { fontSize: 14, fontWeight: '600', color: C.whiteOff },
   workoutSub:       { fontSize: 12, color: C.gray, marginTop: 2 },
-
-  checkFilled: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    backgroundColor: C.purple,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  checkEmpty: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
-    borderWidth: 1.5,
-    borderColor: C.gray,
-  },
-  checkEmptyActive: { borderColor: C.purple },
 
   // Footer link
   footer: {

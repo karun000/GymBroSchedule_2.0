@@ -4,7 +4,7 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { C } from '../Theme';
 
-export default function ExerciseRow({ item, last, onOptions }) {
+export default function ExerciseRow({ item, last, onOptions, showMoreIcon = true }) {
   return (
     <View style={[styles.row, !last && styles.rowBorder]}>
       {/* Icon placeholder */}
@@ -21,13 +21,15 @@ export default function ExerciseRow({ item, last, onOptions }) {
       </View>
 
       {/* Three-dot menu */}
-      <TouchableOpacity
-        onPress={() => onOptions?.(item)}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-        activeOpacity={0.7}
-      >
-        <Icon name="dots-vertical" size={20} color={C.gray} />
-      </TouchableOpacity>
+      {showMoreIcon && (
+        <TouchableOpacity
+          onPress={() => onOptions?.(item)}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+          activeOpacity={0.7}
+        >
+          <Icon name="dots-vertical" size={20} color={C.gray} />
+        </TouchableOpacity>
+      )}
     </View>
   );
 }

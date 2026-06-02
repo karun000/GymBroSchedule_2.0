@@ -14,7 +14,14 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { C } from '../Theme';
 import ExerciseRow from './Exerciserow';
 
-export default function DayCard({ day, expanded, onToggle, onExOptions }) {
+export default function DayCard({
+  day,
+  expanded,
+  onToggle,
+  onExOptions,
+  showExpandIcon = true,
+  showMoreIcon = true,
+}) {
   const count = day.exercises.length;
 
   return (
@@ -44,7 +51,7 @@ export default function DayCard({ day, expanded, onToggle, onExOptions }) {
           ) : (
             <Text style={styles.countLabel}>{count} Exercises</Text>
           )}
-          {!day.isRest && (
+          {showExpandIcon && !day.isRest && (
             <Icon
               name={expanded ? 'chevron-up' : 'chevron-down'}
               size={22}
@@ -64,6 +71,7 @@ export default function DayCard({ day, expanded, onToggle, onExOptions }) {
               item={ex}
               last={i === count - 1}
               onOptions={onExOptions}
+              showMoreIcon={showMoreIcon}
             />
           ))}
         </View>

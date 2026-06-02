@@ -88,20 +88,20 @@ export default function TopMenuDrawer({ visible, onClose }) {
 
           <View style={styles.list}>
             <View style={[styles.actionRowSpace, { backgroundColor: COLORS.card, borderColor: COLORS.border }]}> 
-              <View style={styles.leftActionRow}>
+              {/* <View style={styles.leftActionRow}>
                 <View style={[styles.actionIconWrap, { backgroundColor: COLORS.purple }]}> 
                   <Icon name="theme-light-dark" size={18} color={COLORS.white} />
                 </View>
                 <Text style={[styles.actionLabel, { color: COLORS.white }]}>Theme</Text>
-              </View>
-              <View style={styles.switchWrap}>
+              </View> */}
+              {/* <View style={styles.switchWrap}>
                 <Switch
                   value={mode === 'dark'}
                   onValueChange={toggleTheme}
                   trackColor={{ false: '#767577', true: COLORS.purple }}
                   thumbColor={'#fff'}
                 />
-              </View>
+              </View> */}
             </View>
 
             <TouchableOpacity
