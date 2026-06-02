@@ -5,7 +5,7 @@
 //   expanded   – which day card is currently open (only one at a time)
 // All UI is delegated to focused sub-components.
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import {
   ScrollView,
   StatusBar,
@@ -13,7 +13,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
-import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect, useNavigation } from '@react-navigation/native';
 
 import { C }    from './Theme';
 
@@ -29,6 +29,7 @@ const WEEKS = [
   { id: 'W2', label: 'Week 2' },
   { id: 'W3', label: 'Week 3' },
   { id: 'W4', label: 'Week 4' },
+  { id: 'W5', label: 'Week 5' },
 ];
 
 const DAY_IDS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
@@ -40,6 +41,42 @@ const DAY_NAMES = {
   THU: 'Thursday',
   FRI: 'Friday',
   SAT: 'Saturday',
+};
+
+const DAY_ALIASES = Object.entries(DAY_NAMES).reduce((acc, [id, label]) => {
+  acc[id] = id;
+  acc[label] = id;
+  return acc;
+}, {});
+
+const normalizeDayId = (dayOfWeek) => DAY_ALIASES[dayOfWeek] || 'MON';
+
+const normalizeWeekNumber = (weekValue) => {
+  const parsedWeek = Number(weekValue);
+
+  return Number.isFinite(parsedWeek) && parsedWeek > 0 ? parsedWeek : 1;
+};
+
+const getTodayDayId = () => DAY_IDS[new Date().getDay()] || 'MON';
+
+const getExerciseTime = (exercise) => {
+  const sourceValue = exercise?.createdAt ?? exercise?.updatedAt ?? 0;
+
+  if (typeof sourceValue === 'number') {
+    return sourceValue;
+  }
+
+  if (typeof sourceValue === 'string') {
+    const parsedTime = Date.parse(sourceValue);
+
+    return Number.isFinite(parsedTime) ? parsedTime : 0;
+  }
+
+  if (sourceValue && typeof sourceValue.toDate === 'function') {
+    return sourceValue.toDate().getTime();
+  }
+
+  return 0;
 };
 
 const iconForMuscleGroup = (muscleGroup) => {
@@ -66,8 +103,10 @@ const buildWeekCards = (records) => {
     return acc;
   }, {});
 
-  records.forEach((record) => {
-    const dayKey = DAY_IDS.includes(record.dayOfWeek) ? record.dayOfWeek : 'MON';
+  const sortedRecords = [...records].sort((left, right) => getExerciseTime(left) - getExerciseTime(right));
+
+  sortedRecords.forEach((record) => {
+    const dayKey = normalizeDayId(record.dayOfWeek);
 
     groupedByDay[dayKey].push(record);
   });
@@ -100,20 +139,21 @@ export default function ScheduleScreen() {
   const navigation = useNavigation();
 
   // ── State ─────────────────────────────────────────────────────────────────
-  const [expandedId, setExpandedId] = useState('MON');   // open accordion card
+  const [expandedId, setExpandedId] = useState(getTodayDayId());   // open accordion card
   const [activeWeek, setActiveWeek] = useState('W1');    // highlighted week pill
-  const [weekCards, setWeekCards] = useState({ W1: [], W2: [], W3: [], W4: [] });
+  const [weekCards, setWeekCards] = useState({ W1: [], W2: [], W3: [], W4: [], W5: [] });
   const [editingExercise, setEditingExercise] = useState(null);
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
 
-  const loadSchedule = async () => {
+  const loadSchedule = useCallback(async () => {
     try {
       const records = await fetchLatestUserRecords('exerciseRecords', 100);
-      const grouped = { W1: [], W2: [], W3: [], W4: [] };
+      const sortedRecords = [...records].sort((left, right) => getExerciseTime(left) - getExerciseTime(right));
+      const grouped = { W1: [], W2: [], W3: [], W4: [], W5: [] };
 
-      records.forEach((record) => {
-        const weekNumber = Number(record.week) || 1;
-        const weekKey = `W${Math.min(Math.max(weekNumber, 1), 4)}`;
+      sortedRecords.forEach((record) => {
+        const weekNumber = normalizeWeekNumber(record.week);
+        const weekKey = `W${Math.min(Math.max(weekNumber, 1), 5)}`;
         grouped[weekKey].push(record);
       });
 
@@ -122,15 +162,38 @@ export default function ScheduleScreen() {
         W2: buildWeekCards(grouped.W2),
         W3: buildWeekCards(grouped.W3),
         W4: buildWeekCards(grouped.W4),
+        W5: buildWeekCards(grouped.W5),
       });
     } catch (error) {
       console.log('Failed to load schedule data:', error?.message ?? error);
     }
-  };
+  }, []);
 
   useEffect(() => {
     loadSchedule();
-  }, []);
+  }, [loadSchedule]);
+
+  useFocusEffect(
+    useCallback(() => {
+      loadSchedule();
+    }, [loadSchedule])
+  );
+
+  useEffect(() => {
+    const currentWeekDays = weekCards[activeWeek] || [];
+    const todayDay = getTodayDayId();
+    const todayHasExercises = currentWeekDays.find((day) => day.id === todayDay)?.exercises?.length > 0;
+    const firstAvailableDay = currentWeekDays.find((day) => day?.exercises?.length > 0)?.id;
+
+    if (todayHasExercises) {
+      setExpandedId(todayDay);
+      return;
+    }
+
+    if (firstAvailableDay) {
+      setExpandedId(firstAvailableDay);
+    }
+  }, [activeWeek, weekCards]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleToggle = (id) => {
@@ -158,7 +221,8 @@ export default function ScheduleScreen() {
   };
 
   const handleSaveExerciseEdit = async (updatedExercise) => {
-    const resolvedWeek = updatedExercise.week || Number(activeWeek.replace('W', ''));
+    const resolvedWeek = normalizeWeekNumber(updatedExercise.week || activeWeek.replace('W', ''));
+    const resolvedDayOfWeek = normalizeDayId(updatedExercise.dayOfWeek);
 
     await updateExerciseRecord(updatedExercise.id, {
       name: updatedExercise.name,
@@ -166,7 +230,7 @@ export default function ScheduleScreen() {
       equipment: updatedExercise.equipment,
       sets: updatedExercise.sets,
       reps: updatedExercise.reps,
-      dayOfWeek: updatedExercise.dayOfWeek,
+      dayOfWeek: resolvedDayOfWeek,
       week: resolvedWeek,
       weekLabel: `W${resolvedWeek}`,
     });

@@ -11,10 +11,11 @@ import {
   View,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { BlurView } from '@react-native-community/blur';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
+import { auth } from '../FireBase/firebase';
 import { ThemeContext } from '../context/ThemeContext';
 
-import { auth } from '../FireBase/firebase';
 
 export default function TopMenuDrawer({ visible, onClose }) {
   const { theme, toggleTheme, mode } = useContext(ThemeContext);
@@ -54,12 +55,30 @@ export default function TopMenuDrawer({ visible, onClose }) {
     }
   };
 
+  const drawerDynamicStyle = {
+    borderRightColor: COLORS.border,
+    transform: [{ translateX: slideX }],
+  };
+
   return (
     <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
       <View style={styles.overlay}>
-        <Pressable style={styles.scrim} onPress={onClose} />
+        <Pressable style={styles.scrim} onPress={onClose}>
+          <BlurView
+            style={StyleSheet.absoluteFill}
+            blurType={mode === 'dark' ? 'dark' : 'light'}
+            blurAmount={18}
+            reducedTransparencyFallbackColor={COLORS.background}
+          />
+        </Pressable>
 
-        <Animated.View style={[styles.drawer, { transform: [{ translateX: slideX }] }]}>
+        <Animated.View
+          style={[
+            styles.drawer,
+            styles.drawerOverlay,
+            drawerDynamicStyle,
+          ]}
+        >
           <View style={[styles.greetingBlock, { backgroundColor: COLORS.card, borderColor: COLORS.border }]}>
             <Text style={[styles.greetingTitle, { color: COLORS.white }]}>Hello, {displayName}</Text>
             <Text style={[styles.greetingText, { color: COLORS.gray }]}>Ready to lock in today's training?</Text>
@@ -106,7 +125,7 @@ export default function TopMenuDrawer({ visible, onClose }) {
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.42)',
+    backgroundColor: 'transparent',
     flexDirection: 'row',
   },
   scrim: {
@@ -122,6 +141,9 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     paddingTop: 56,
     paddingHorizontal: 16,
+  },
+  drawerOverlay: {
+    backgroundColor: 'rgba(0, 0, 0, 0.22)',
   },
   greetingBlock: {
     borderWidth: 1,

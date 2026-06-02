@@ -1,10 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { ActivityIndicator, SafeAreaView, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
+import { auth } from './FireBase/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import BottomTabNavigator from './components/BottomNav';
 import { navigationRef } from './navigationRef';
-import { auth } from './FireBase/firebase';
 import ThemeProvider from './context/ThemeContext';
 import DrawerProvider, { DrawerContext } from './context/DrawerContext';
 import TopMenuDrawer from './components/TopMenuDrawer';
@@ -16,8 +16,14 @@ export default function App() {
   const [user, setUser] = useState(undefined);
   const [authMode, setAuthMode] = useState('signin');
 
-  useEffect(() => onAuthStateChanged(auth, setUser), []);
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
+      setUser(firebaseUser ?? null);
+    });
+    return unsubscribe;
+  }, []);
 
+  // Still restoring session — show spinner
   if (user === undefined) {
     return (
       <SafeAreaView style={styles.loadingShell}>
@@ -26,6 +32,7 @@ export default function App() {
     );
   }
 
+  // No session — show auth screens
   if (!user) {
     return authMode === 'signin' ? (
       <SignInScreen onSwitchToSignUp={() => setAuthMode('signup')} />
@@ -34,6 +41,7 @@ export default function App() {
     );
   }
 
+  // Session restored or just signed in — show main app
   return (
     <ThemeProvider>
       <DrawerProvider>
@@ -41,7 +49,7 @@ export default function App() {
           <BottomTabNavigator />
         </NavigationContainer>
 
-        {/* Render global drawer tied to DrawerProvider */}
+        {/* Global drawer tied to DrawerProvider */}
         <DrawerContext.Consumer>
           {({ visible, close }) => (
             <TopMenuDrawer visible={visible} onClose={close} />

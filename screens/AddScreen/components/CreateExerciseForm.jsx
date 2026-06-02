@@ -16,13 +16,13 @@ import Theme from '../Theme';
 import { MUSCLE_GROUPS, EQUIPMENT_LIST, REPS_OPTIONS } from '../AddExerciseData';
 
 const DAYS_OF_WEEK = [
+  { id: 'SUN', label: 'Sun' },
   { id: 'MON', label: 'Mon' },
   { id: 'TUE', label: 'Tue' },
   { id: 'WED', label: 'Wed' },
   { id: 'THU', label: 'Thu' },
   { id: 'FRI', label: 'Fri' },
   { id: 'SAT', label: 'Sat' },
-  { id: 'SUN', label: 'Sun' },
 ];
 
 /* ─── Reusable Dropdown Picker Modal ─── */

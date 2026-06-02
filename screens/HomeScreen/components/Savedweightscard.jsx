@@ -60,7 +60,7 @@ export default function SavedWeightsCard({
             <Icon name="bullseye-arrow" size={20} color={C.purple} />
           </View>
           <View style={{ marginLeft: 10 }}>
-            <Text style={styles.cardTitle}>Saved Weights</Text>
+            <Text style={styles.cardTitle}>PR</Text>
             <Text style={styles.cardDesc}>Your latest used weights.</Text>
           </View>
         </View>
@@ -81,11 +81,7 @@ export default function SavedWeightsCard({
         />
       ))}
 
-      {/* Add Exercise */}
-      <TouchableOpacity style={styles.footer} onPress={onAddExercise} activeOpacity={0.7}>
-        <Icon name="plus" size={16} color={C.purple} style={{ marginRight: 4 }} />
-        <Text style={styles.footerText}>Add Exercise</Text>
-      </TouchableOpacity>
+      
     </View>
   );
 }

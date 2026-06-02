@@ -2,12 +2,14 @@
 // Entry point for the Home tab.
 // All UI logic is delegated to focused components; this file only composes them.
 
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { useFocusEffect } from '@react-navigation/native';
 
 import { C }                from './Theme';
+import { navigationRef } from '../../navigationRef';
 
 import NavHeader        from '../../components/NavHeader';
 import GreetingSection  from './components/GreetingSection';
@@ -34,7 +36,10 @@ const WEEK_OPTIONS = [
   { id: 'W2', label: 'Week 2' },
   { id: 'W3', label: 'Week 3' },
   { id: 'W4', label: 'Week 4' },
+  { id: 'W5', label: 'Week 5' },
 ];
+
+const HOME_WEEK_IDS = WEEK_OPTIONS.map((week) => week.id);
 
 const muscleIcons = {
   Chest: 'dumbbell',
@@ -91,9 +96,16 @@ const buildWeekCards = (records) => {
     return acc;
   }, {});
 
-  records.forEach((record) => {
+  const sortedRecords = [...records].sort((left, right) => {
+    const leftTime = Date.parse(left?.createdAt ?? left?.updatedAt ?? 0) || 0;
+    const rightTime = Date.parse(right?.createdAt ?? right?.updatedAt ?? 0) || 0;
+
+    return leftTime - rightTime;
+  });
+
+  sortedRecords.forEach((record) => {
     const weekNumber = Number(record.week) || 1;
-    const weekKey = `W${Math.min(Math.max(weekNumber, 1), 4)}`;
+    const weekKey = `W${Math.min(Math.max(weekNumber, 1), 5)}`;
     groupedByWeek[weekKey].push(record);
   });
 
@@ -120,6 +132,16 @@ export default function HomeScreen() {
   const [selectedDay, setSelectedDay] = useState(getTodayDayId());
   const [weights, setWeights] = useState([]);
 
+  const visibleWeekOptions = HOME_WEEK_IDS
+    .map((weekId) => WEEK_OPTIONS.find((week) => week.id === weekId))
+    .filter((week) => {
+      const currentWeekCards = weekCards[week?.id] || {};
+
+      return Object.values(currentWeekCards).some((day) => day?.exercises?.length > 0);
+    });
+
+  const visibleWeekKey = visibleWeekOptions.map((week) => week.id).join(',');
+
   useEffect(() => {
     let isActive = true;
 
@@ -134,8 +156,7 @@ export default function HomeScreen() {
           return;
         }
 
-        const cardsByWeek = buildWeekCards([...exerciseRecords].reverse());
-
+        const cardsByWeek = buildWeekCards(exerciseRecords);
         setWeekCards(cardsByWeek);
         setWeights(buildWeightPreview(prRecords));
       } catch (error) {
@@ -150,9 +171,57 @@ export default function HomeScreen() {
     };
   }, []);
 
+  useFocusEffect(
+    useCallback(() => {
+      let isActive = true;
+
+      const loadHomeData = async () => {
+        try {
+          const [exerciseRecords, prRecords] = await Promise.all([
+            fetchLatestUserRecords('exerciseRecords', 100),
+            fetchLatestUserRecords('prRecords', 3),
+          ]);
+
+          if (!isActive) {
+            return;
+          }
+
+          const cardsByWeek = buildWeekCards(exerciseRecords);
+          setWeekCards(cardsByWeek);
+          setWeights(buildWeightPreview(prRecords));
+        } catch (error) {
+          console.log('Failed to load home data:', error?.message ?? error);
+        }
+      };
+
+      loadHomeData();
+
+      return () => {
+        isActive = false;
+      };
+    }, [])
+  );
+
+  useEffect(() => {
+    if (visibleWeekOptions.length === 0) {
+      return;
+    }
+
+    if (!visibleWeekOptions.some((week) => week.id === selectedWeek)) {
+      setSelectedWeek(visibleWeekOptions[0].id);
+    }
+  }, [selectedWeek, visibleWeekKey]);
+
   useEffect(() => {
     const currentWeekCards = weekCards[selectedWeek] || {};
+    const todayDay = getTodayDayId();
+    const todayHasExercises = currentWeekCards[todayDay]?.exercises?.length > 0;
     const firstAvailableDay = DAY_LABELS.find((day) => currentWeekCards[day]?.exercises?.length > 0);
+
+    if (todayHasExercises) {
+      setSelectedDay(todayDay);
+      return;
+    }
 
     if (firstAvailableDay) {
       setSelectedDay(firstAvailableDay);
@@ -160,7 +229,11 @@ export default function HomeScreen() {
   }, [selectedWeek, weekCards]);
 
   // ── Handlers (wire to navigation / state as needed) ──────────────────────
-  const handleViewAll     = () => console.log('View all weights');
+  const handleViewAll     = () => {
+    if (navigationRef.isReady()) {
+      navigationRef.navigate('Weight');
+    }
+  };
   const handleAddExercise = () => console.log('Add exercise');
   const handleWeightRow   = (item) => console.log('Weight row pressed:', item.title);
 
@@ -195,29 +268,38 @@ export default function HomeScreen() {
           <Text style={styles.sectionLabel}>Workout Plan</Text>
         </View>
 
-        <WeekSelector
-          weeks={WEEK_OPTIONS}
-          activeWeek={selectedWeek}
-          onWeekPress={setSelectedWeek}
-        />
+        {visibleWeekOptions.length > 0 && (
+          <WeekSelector
+            weeks={visibleWeekOptions}
+            activeWeek={selectedWeek}
+            onWeekPress={setSelectedWeek}
+          />
+        )}
 
-        <DaySelector
-          days={DAY_OPTIONS}
-          activeDay={selectedDay}
-          onDayPress={setSelectedDay}
-        />
+        {visibleWeekOptions.length > 0 && (
+          <DaySelector
+            days={DAY_OPTIONS}
+            activeDay={selectedDay}
+            onDayPress={setSelectedDay}
+          />
+        )}
 
-        {(weekCards[selectedWeek] || {})[selectedDay] ? (
+        {visibleWeekOptions.length > 0 && (weekCards[selectedWeek] || {})[selectedDay] ? (
           <DayCard
             day={(weekCards[selectedWeek] || {})[selectedDay]}
             expanded
             onToggle={() => {}}
             onExOptions={(item) => console.log('Options for:', item.name)}
           />
-        ) : (
+        ) : visibleWeekOptions.length > 0 ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>No exercise for this day</Text>
             <Text style={styles.emptyText}>Add an exercise in the Add screen and pick a day to see it here.</Text>
+          </View>
+        ) : (
+          <View style={styles.emptyCard}>
+            <Text style={styles.emptyTitle}>No saved workouts yet</Text>
+            <Text style={styles.emptyText}>Add exercises to any week to show them here.</Text>
           </View>
         )}
 

@@ -11,12 +11,13 @@ import {
   View,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { auth } from '../../FireBase/firebase';
 import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import Theme from './Theme';
 import AuthInput from './AuthInput';
 import PasswordStrength from './PasswordStrength';
 import SocialButton from './SocialButton';
-import { auth, signInWithGoogle } from '../../FireBase/firebase';
+import { signInWithGoogle } from '../../FireBase/firebase';
 import { saveUserProfile } from '../../FireBase/records';
 
 const getFriendlyAuthError = (error) => {
@@ -25,28 +26,36 @@ const getFriendlyAuthError = (error) => {
   if (code === 'auth/configuration-not-found' || code === 'auth/operation-not-allowed') {
     return 'Enable Email/Password sign-in in Firebase Console > Authentication > Sign-in method.';
   }
-
   if (code === 'auth/missing-google-web-client-id') {
     return 'Add the Google Web client ID in FireBase/firebase.js before using Google login.';
+  }
+  if (code === 'auth/email-already-in-use') {
+    return 'An account with this email already exists.';
+  }
+  if (code === 'auth/invalid-email') {
+    return 'Please enter a valid email address.';
+  }
+  if (code === 'auth/weak-password') {
+    return 'Password should be at least 6 characters.';
   }
 
   return error?.message ?? 'Unable to create your account right now.';
 };
 
 const SignUpScreen = ({ navigation, onSwitchToSignIn }) => {
-  const [fullName, setFullName] = useState('');
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
+  const [fullName, setFullName]               = useState('');
+  const [email, setEmail]                     = useState('');
+  const [password, setPassword]               = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [agreeTerms, setAgreeTerms] = useState(false);
-  const [loading, setLoading] = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
+  const [agreeTerms, setAgreeTerms]           = useState(false);
+  const [loading, setLoading]                 = useState(false);
+  const [googleLoading, setGoogleLoading]     = useState(false);
 
-  const emailRef = useRef(null);
+  const emailRef    = useRef(null);
   const passwordRef = useRef(null);
-  const confirmRef = useRef(null);
+  const confirmRef  = useRef(null);
 
-  const passwordsMatch = confirmPassword.length > 0 && password === confirmPassword;
+  const passwordsMatch    = confirmPassword.length > 0 && password === confirmPassword;
   const passwordsMismatch = confirmPassword.length > 0 && password !== confirmPassword;
 
   const handleSignUp = async () => {
@@ -54,12 +63,10 @@ const SignUpScreen = ({ navigation, onSwitchToSignIn }) => {
       Alert.alert('Terms required', 'Please accept the terms to create an account.');
       return;
     }
-
     if (!fullName.trim() || !email.trim() || !password || !confirmPassword) {
       Alert.alert('Missing details', 'Fill in all fields to continue.');
       return;
     }
-
     if (password !== confirmPassword) {
       Alert.alert('Password mismatch', 'Passwords do not match.');
       return;
@@ -68,16 +75,15 @@ const SignUpScreen = ({ navigation, onSwitchToSignIn }) => {
     try {
       setLoading(true);
       const credential = await createUserWithEmailAndPassword(auth, email.trim(), password);
-      await updateProfile(credential.user, {
-        displayName: fullName.trim(),
-      });
+
+      await updateProfile(credential.user, { displayName: fullName.trim() });
+
       await saveUserProfile({
         displayName: fullName.trim(),
         email: email.trim(),
       });
     } catch (error) {
-      const message = getFriendlyAuthError(error);
-      Alert.alert('Sign up failed', message);
+      Alert.alert('Sign up failed', getFriendlyAuthError(error));
     } finally {
       setLoading(false);
     }
@@ -87,6 +93,7 @@ const SignUpScreen = ({ navigation, onSwitchToSignIn }) => {
     try {
       setGoogleLoading(true);
       await signInWithGoogle();
+      // No navigation needed — App.js onAuthStateChanged fires automatically
     } catch (error) {
       Alert.alert('Google sign in failed', getFriendlyAuthError(error));
     } finally {
@@ -97,19 +104,19 @@ const SignUpScreen = ({ navigation, onSwitchToSignIn }) => {
   return (
     <SafeAreaView style={styles.safe}>
       <StatusBar barStyle="light-content" backgroundColor={Theme.colors.background} />
-        <ScrollView
-          contentContainerStyle={styles.scroll}
-          keyboardShouldPersistTaps="handled"
-          keyboardDismissMode="on-drag"
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.brandWrap}>
-            <View style={styles.logoCircle}>
-              <Icon name="dumbbell" size={32} color="#fff" />
-            </View>
-            <Text style={styles.brandName}>GymBro Schedule</Text>
-            <Text style={styles.brandTagline}>Start your fitness journey today</Text>
+      <ScrollView
+        contentContainerStyle={styles.scroll}
+        keyboardShouldPersistTaps="handled"
+        keyboardDismissMode="on-drag"
+        showsVerticalScrollIndicator={false}
+      >
+        <View style={styles.brandWrap}>
+          <View style={styles.logoCircle}>
+            <Icon name="dumbbell" size={32} color="#fff" />
           </View>
+          <Text style={styles.brandName}>GymBro Schedule</Text>
+          <Text style={styles.brandTagline}>Start your fitness journey today</Text>
+        </View>
 
         <View style={styles.card}>
           <Text style={styles.cardTitle}>Create Account</Text>
@@ -203,21 +210,20 @@ const SignUpScreen = ({ navigation, onSwitchToSignIn }) => {
             )}
           </TouchableOpacity>
 
-          <View style={styles.dividerRow}>
+          {/* <View style={styles.dividerRow}>
             <View style={styles.dividerLine} />
             <Text style={styles.dividerText}>or sign up with</Text>
             <View style={styles.dividerLine} />
-          </View>
+          </View> */}
 
-          <View style={styles.socialRow}>
+          {/* <View style={styles.socialRow}>
             <SocialButton
               iconName="google"
               label="Google"
               onPress={handleGoogleSignIn}
               disabled={googleLoading}
             />
-            <SocialButton iconName="apple" label="Apple" onPress={() => {}} />
-          </View>
+          </View> */}
         </View>
 
         <View style={styles.footer}>
@@ -228,7 +234,6 @@ const SignUpScreen = ({ navigation, onSwitchToSignIn }) => {
                 onSwitchToSignIn();
                 return;
               }
-
               navigation?.navigate('SignIn');
             }}
             activeOpacity={0.7}

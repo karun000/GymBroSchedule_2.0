@@ -8,6 +8,7 @@ import {
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import Theme from './Theme';
 import { WEEKS } from './AddExerciseData';
 import WeekSelector from './components/WeekSelector';
@@ -22,9 +23,56 @@ import {
   updateExerciseRecord,
 } from '../../FireBase/records';
 
+const DAY_LABELS = {
+  MON: 'Monday',
+  TUE: 'Tuesday',
+  WED: 'Wednesday',
+  THU: 'Thursday',
+  FRI: 'Friday',
+  SAT: 'Saturday',
+  SUN: 'Sunday',
+};
+
+const normalizeDayId = (dayOfWeek) => {
+  if (!dayOfWeek) {
+    return 'MON';
+  }
+
+  const upperValue = String(dayOfWeek).toUpperCase();
+
+  if (DAY_LABELS[upperValue]) {
+    return upperValue;
+  }
+
+  const matchedEntry = Object.entries(DAY_LABELS).find(([, label]) => label.toUpperCase() === upperValue);
+
+  return matchedEntry?.[0] || 'MON';
+};
+
+const getExerciseTime = (exercise) => {
+  const sourceValue = exercise?.createdAt ?? exercise?.updatedAt ?? 0;
+
+  if (typeof sourceValue === 'number') {
+    return sourceValue;
+  }
+
+  if (typeof sourceValue === 'string') {
+    const parsedTime = Date.parse(sourceValue);
+
+    return Number.isFinite(parsedTime) ? parsedTime : 0;
+  }
+
+  if (sourceValue && typeof sourceValue.toDate === 'function') {
+    return sourceValue.toDate().getTime();
+  }
+
+  return 0;
+};
+
 const page = ({ navigation }) => {
-  const [selectedWeek, setSelectedWeek] = useState(3);
-  const [selectedDay, setSelectedDay] = useState('MON');
+  const tabBarHeight = useBottomTabBarHeight();
+  const [selectedWeek, setSelectedWeek] = useState(1);
+  const [selectedDay, setSelectedDay] = useState('SUN');
   const [editingExercise, setEditingExercise] = useState(null);
 
   const [exercisesByWeek, setExercisesByWeek] = useState({
@@ -35,17 +83,20 @@ const page = ({ navigation }) => {
     5: [],
   });
 
-  const exercises = exercisesByWeek[selectedWeek] || [];
+  const weekExercises = exercisesByWeek[selectedWeek] || [];
+  const exercises = weekExercises.filter((exercise) => normalizeDayId(exercise.dayOfWeek) === selectedDay);
 
   const loadExercises = async () => {
     try {
       const storedExercises = await fetchUserRecords('exerciseRecords');
+      const sortedExercises = [...storedExercises].sort((left, right) => getExerciseTime(left) - getExerciseTime(right));
 
       const groupedExercises = { 1: [], 2: [], 3: [], 4: [], 5: [] };
 
-      storedExercises.forEach((exercise) => {
-        const weekKey = Number(exercise.week) || 3;
+      sortedExercises.forEach((exercise) => {
+        const weekKey = Math.min(Math.max(Number(exercise.week) || 1, 1), 5);
         const currentWeekExercises = groupedExercises[weekKey] || [];
+        const normalizedDay = normalizeDayId(exercise.dayOfWeek);
 
         groupedExercises[weekKey] = [
           ...currentWeekExercises,
@@ -56,7 +107,7 @@ const page = ({ navigation }) => {
             equipment: exercise.equipment,
             sets: exercise.sets,
             reps: exercise.reps,
-            dayOfWeek: exercise.dayOfWeek,
+            dayOfWeek: normalizedDay,
             week: exercise.week,
             weekLabel: exercise.weekLabel,
           },
@@ -87,7 +138,7 @@ const page = ({ navigation }) => {
       ...newExercise,
       week: selectedWeek,
       weekLabel: `W${selectedWeek}`,
-      dayOfWeek: newExercise.dayOfWeek || selectedDay,
+      dayOfWeek: normalizeDayId(newExercise.dayOfWeek || selectedDay),
     });
 
     setExercisesByWeek((prev) => ({
@@ -99,7 +150,7 @@ const page = ({ navigation }) => {
           ...newExercise,
           week: selectedWeek,
           weekLabel: `W${selectedWeek}`,
-          dayOfWeek: newExercise.dayOfWeek || selectedDay,
+          dayOfWeek: normalizeDayId(newExercise.dayOfWeek || selectedDay),
         },
       ],
     }));
@@ -116,6 +167,7 @@ const page = ({ navigation }) => {
 
   const handleSaveExerciseEdit = async (updatedExercise) => {
     const resolvedWeek = updatedExercise.week || selectedWeek;
+    const resolvedDay = normalizeDayId(updatedExercise.dayOfWeek);
 
     await updateExerciseRecord(updatedExercise.id, {
       name: updatedExercise.name,
@@ -123,7 +175,7 @@ const page = ({ navigation }) => {
       equipment: updatedExercise.equipment,
       sets: updatedExercise.sets,
       reps: updatedExercise.reps,
-      dayOfWeek: updatedExercise.dayOfWeek,
+      dayOfWeek: resolvedDay,
       week: resolvedWeek,
       weekLabel: `W${resolvedWeek}`,
     });
@@ -150,13 +202,16 @@ const page = ({ navigation }) => {
       <WeekSelector
         weeks={WEEKS}
         selectedWeek={selectedWeek}
-        exerciseCount={exercises.length}
+        exerciseCount={weekExercises.length}
         onSelect={setSelectedWeek}
       />
 
       <ScrollView
         style={styles.scroll}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={[
+          styles.scrollContent,
+          { paddingBottom: tabBarHeight + Theme.spacing.lg },
+        ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
       >
@@ -169,7 +224,9 @@ const page = ({ navigation }) => {
 
         {exercises.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>WEEK {selectedWeek} EXERCISES</Text>
+            <Text style={styles.sectionTitle}>
+              WEEK {selectedWeek} - {DAY_LABELS[selectedDay] || selectedDay} EXERCISES
+            </Text>
             <View style={styles.listCard}>
               {exercises.map((ex, i) => (
                 <ExerciseListItem
@@ -180,6 +237,13 @@ const page = ({ navigation }) => {
                 />
               ))}
             </View>
+          </View>
+        )}
+
+        {weekExercises.length > 0 && exercises.length === 0 && (
+          <View style={styles.section}>
+            <Text style={styles.emptyTitle}>No exercises for {DAY_LABELS[selectedDay] || selectedDay}</Text>
+            <Text style={styles.emptyText}>Select another day or add an exercise for the current day.</Text>
           </View>
         )}
       </ScrollView>
@@ -204,7 +268,6 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingBottom: 40,
   },
   section: {
     marginHorizontal: Theme.spacing.lg,

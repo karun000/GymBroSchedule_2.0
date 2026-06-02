@@ -6,13 +6,13 @@ export const WEEKS = [
 ];
 
 export const DAYS_OF_WEEK = [
+  { id: 'SUN', label: 'SUN' },
   { id: 'MON', label: 'MON' },
   { id: 'TUE', label: 'TUE' },
   { id: 'WED', label: 'WED' },
   { id: 'THU', label: 'THU' },
   { id: 'FRI', label: 'FRI' },
   { id: 'SAT', label: 'SAT' },
-  { id: 'SUN', label: 'SUN' },
 ];
 
 export const MUSCLE_GROUPS = [
@@ -21,6 +21,7 @@ export const MUSCLE_GROUPS = [
   'Shoulders',
   'Biceps',
   'Triceps',
+  'Forearms',
   'Legs',
   'Glutes',
   'Core',

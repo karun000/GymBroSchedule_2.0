@@ -11,11 +11,12 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { signInWithEmailAndPassword, sendPasswordResetEmail } from 'firebase/auth';
+import { auth } from '../../FireBase/firebase';
+import { sendPasswordResetEmail, signInWithEmailAndPassword } from 'firebase/auth';
 import Theme from './Theme';
 import AuthInput from './AuthInput';
 import SocialButton from './SocialButton';
-import { auth, signInWithGoogle } from '../../FireBase/firebase';
+import { signInWithGoogle } from '../../FireBase/firebase';
 
 const getFriendlyAuthError = (error) => {
   const code = error?.code ?? '';
@@ -23,19 +24,27 @@ const getFriendlyAuthError = (error) => {
   if (code === 'auth/configuration-not-found' || code === 'auth/operation-not-allowed') {
     return 'Enable Email/Password sign-in in Firebase Console > Authentication > Sign-in method.';
   }
-
   if (code === 'auth/missing-google-web-client-id') {
     return 'Add the Google Web client ID in FireBase/firebase.js before using Google login.';
+  }
+  if (code === 'auth/user-not-found' || code === 'auth/wrong-password' || code === 'auth/invalid-credential') {
+    return 'Incorrect email or password.';
+  }
+  if (code === 'auth/invalid-email') {
+    return 'Please enter a valid email address.';
+  }
+  if (code === 'auth/too-many-requests') {
+    return 'Too many attempts. Please try again later.';
   }
 
   return error?.message ?? 'Unable to sign in right now.';
 };
 
 const SignInScreen = ({ navigation, onSwitchToSignUp }) => {
-  const [email, setEmail]       = useState('');
-  const [password, setPassword] = useState('');
-  const [remember, setRemember] = useState(false);
-  const [loading, setLoading] = useState(false);
+  const [email, setEmail]             = useState('');
+  const [password, setPassword]       = useState('');
+  const [remember, setRemember]       = useState(false);
+  const [loading, setLoading]         = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
 
   const passwordRef = useRef(null);
@@ -50,8 +59,7 @@ const SignInScreen = ({ navigation, onSwitchToSignUp }) => {
       setLoading(true);
       await signInWithEmailAndPassword(auth, email.trim(), password);
     } catch (error) {
-      const message = getFriendlyAuthError(error);
-      Alert.alert('Sign in failed', message);
+      Alert.alert('Sign in failed', getFriendlyAuthError(error));
     } finally {
       setLoading(false);
     }
@@ -67,8 +75,7 @@ const SignInScreen = ({ navigation, onSwitchToSignUp }) => {
       await sendPasswordResetEmail(auth, email.trim());
       Alert.alert('Reset email sent', 'Check your inbox for the password reset link.');
     } catch (error) {
-      const message = getFriendlyAuthError(error);
-      Alert.alert('Reset failed', message);
+      Alert.alert('Reset failed', getFriendlyAuthError(error));
     }
   };
 
@@ -76,6 +83,7 @@ const SignInScreen = ({ navigation, onSwitchToSignUp }) => {
     try {
       setGoogleLoading(true);
       await signInWithGoogle();
+      // No navigation needed — App.js onAuthStateChanged fires automatically
     } catch (error) {
       Alert.alert('Google sign in failed', getFriendlyAuthError(error));
     } finally {
@@ -157,7 +165,7 @@ const SignInScreen = ({ navigation, onSwitchToSignUp }) => {
             )}
           </TouchableOpacity>
 
-          <View style={styles.dividerRow}>
+          {/* <View style={styles.dividerRow}>
             <View style={styles.dividerLine} />
             <Text style={styles.dividerText}>or continue with</Text>
             <View style={styles.dividerLine} />
@@ -170,8 +178,7 @@ const SignInScreen = ({ navigation, onSwitchToSignUp }) => {
               onPress={handleGoogleSignIn}
               disabled={googleLoading}
             />
-            <SocialButton iconName="apple" label="Apple" onPress={() => {}} />
-          </View>
+          </View> */}
         </View>
 
         <View style={styles.footer}>
@@ -182,7 +189,6 @@ const SignInScreen = ({ navigation, onSwitchToSignUp }) => {
                 onSwitchToSignUp();
                 return;
               }
-
               navigation?.navigate('SignUp');
             }}
             activeOpacity={0.7}
@@ -206,8 +212,6 @@ const styles = StyleSheet.create({
     paddingVertical: Theme.spacing.xl,
     justifyContent: 'center',
   },
-
-  /* Brand */
   brandWrap: {
     alignItems: 'center',
     marginBottom: Theme.spacing.xxl + 4,
@@ -237,8 +241,6 @@ const styles = StyleSheet.create({
     color: Theme.colors.textMuted,
     fontSize: Theme.font.sm,
   },
-
-  /* Card */
   card: {
     backgroundColor: Theme.colors.card,
     borderRadius: Theme.radius.lg,
@@ -258,8 +260,6 @@ const styles = StyleSheet.create({
     fontSize: Theme.font.sm,
     marginBottom: Theme.spacing.xl,
   },
-
-  /* Remember / Forgot */
   row: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -294,8 +294,6 @@ const styles = StyleSheet.create({
     fontSize: Theme.font.sm,
     fontWeight: '600',
   },
-
-  /* Primary button */
   primaryBtn: {
     backgroundColor: Theme.colors.primary,
     borderRadius: Theme.radius.full,
@@ -322,8 +320,6 @@ const styles = StyleSheet.create({
   primaryBtnIcon: {
     marginLeft: 8,
   },
-
-  /* Divider */
   dividerRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -340,14 +336,10 @@ const styles = StyleSheet.create({
     fontSize: Theme.font.xs,
     fontWeight: '500',
   },
-
-  /* Social */
   socialRow: {
     flexDirection: 'row',
     gap: 10,
   },
-
-  /* Footer */
   footer: {
     flexDirection: 'row',
     justifyContent: 'center',

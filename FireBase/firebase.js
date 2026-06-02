@@ -1,6 +1,13 @@
-import { initializeApp, getApps } from "firebase/app";
-import { getAuth, initializeAuth, GoogleAuthProvider, inMemoryPersistence, signInWithCredential } from "firebase/auth";
-import { getFirestore } from "firebase/firestore";
+import 'react-native-get-random-values';
+import { getApps, initializeApp, getApp } from 'firebase/app';
+import {
+  GoogleAuthProvider,
+  signInWithCredential,
+  initializeAuth,
+  getReactNativePersistence,
+} from 'firebase/auth';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { getFirestore } from 'firebase/firestore';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 const firebaseConfig = {
@@ -10,41 +17,23 @@ const firebaseConfig = {
   storageBucket: "gymbroschedule-2.firebasestorage.app",
   messagingSenderId: "598610094756",
   appId: "1:598610094756:web:3433bafab3c200a853d431",
-  measurementId: "G-B5CW0ZXW1B"
+  measurementId: "G-B5CW0ZXW1B",
 };
-const app = getApps().length ? getApps()[0] : initializeApp(firebaseConfig);
 
-const GOOGLE_WEB_CLIENT_ID = 'PASTE_YOUR_WEB_CLIENT_ID_HERE';
-const isGoogleConfigured = GOOGLE_WEB_CLIENT_ID && !GOOGLE_WEB_CLIENT_ID.includes('PASTE_YOUR_WEB_CLIENT_ID_HERE');
+const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
+const persistence = getReactNativePersistence(AsyncStorage);
+const auth = initializeAuth(app, { persistence });
+const db = getFirestore(app);
 
-if (isGoogleConfigured) {
-  GoogleSignin.configure({
-    webClientId: GOOGLE_WEB_CLIENT_ID,
-    scopes: ['email', 'profile'],
-  });
-}
+GoogleSignin.configure({
+  webClientId: '598610094756-0r0vqpubcrv5s5kvnpgj9phit8e4c1dd.apps.googleusercontent.com',
+  scopes: ['email', 'profile'],
+});
 
-let auth;
-
-try {
-  auth = initializeAuth(app, {
-    persistence: [inMemoryPersistence],
-  });
-} catch (error) {
-  auth = getAuth(app);
-}
-
-// Firebase services
-export { auth };
-export const db = getFirestore(app);
+export { auth, db };
+export const getDb = () => db;
 
 export const signInWithGoogle = async () => {
-  if (!isGoogleConfigured) {
-    const error = new Error('Add your Google Web client ID in FireBase/firebase.js.');
-    error.code = 'auth/missing-google-web-client-id';
-    throw error;
-  }
-
   await GoogleSignin.hasPlayServices({ showPlayServicesUpdateDialog: true });
 
   const response = await GoogleSignin.signIn();
@@ -55,14 +44,13 @@ export const signInWithGoogle = async () => {
     throw error;
   }
 
-  const idToken = response?.data?.idToken;
-
+  const idToken = response?.idToken ?? response?.data?.idToken;
   if (!idToken) {
-    const error = new Error('Google sign-in did not return an idToken. Check the web client ID.');
+    const error = new Error('Google sign-in did not return an idToken.');
     error.code = 'auth/missing-id-token';
     throw error;
   }
 
-  const credential = GoogleAuthProvider.credential(idToken);
-  return signInWithCredential(auth, credential);
+  const googleCredential = GoogleAuthProvider.credential(idToken);
+  return signInWithCredential(auth, googleCredential);
 };

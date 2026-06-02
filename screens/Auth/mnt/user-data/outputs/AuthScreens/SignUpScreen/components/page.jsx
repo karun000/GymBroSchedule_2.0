@@ -144,18 +144,18 @@ const SignUpScreen = ({ navigation }) => {
             <Icon name="arrow-right" size={18} color="#fff" style={styles.primaryBtnIcon} />
           </TouchableOpacity>
 
-          {/* Divider */}
+          {/* Divider
           <View style={styles.dividerRow}>
             <View style={styles.dividerLine} />
             <Text style={styles.dividerText}>or sign up with</Text>
             <View style={styles.dividerLine} />
-          </View>
+          </View> */}
 
           {/* Social buttons */}
-          <View style={styles.socialRow}>
+          {/* <View style={styles.socialRow}>
             <SocialButton iconName="google" label="Google" onPress={() => {}} />
             <SocialButton iconName="apple" label="Apple" onPress={() => {}} />
-          </View>
+          </View> */}
         </View>
 
         {/* ── Footer ── */}

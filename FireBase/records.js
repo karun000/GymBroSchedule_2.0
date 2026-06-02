@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { collection, deleteDoc, doc, getDocs, setDoc, updateDoc } from 'firebase/firestore';
-import { auth, db } from './firebase';
+import { collection, doc, getDocs, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { auth, getDb } from './firebase';
 
 const RECORD_CACHE_PREFIX = '@gymbro/record-cache';
 const PENDING_MUTATIONS_PREFIX = '@gymbro/pending-record-mutations';
@@ -23,7 +23,7 @@ const getCacheKey = (collectionName) => `${RECORD_CACHE_PREFIX}:${getCurrentUser
 
 const getPendingKey = () => `${PENDING_MUTATIONS_PREFIX}:${getCurrentUserId()}`;
 
-const userCollection = (collectionName) => collection(db, 'users', getCurrentUserId(), collectionName);
+const userCollection = (collectionName) => collection(getDb(), 'users', getCurrentUserId(), collectionName);
 
 const toCacheValue = (value) => {
   if (value && typeof value.toDate === 'function') {
@@ -137,7 +137,7 @@ const runPendingMutations = async () => {
 
   while (remainingMutations.length > 0) {
     const mutation = remainingMutations[0];
-    const recordRef = doc(db, 'users', getCurrentUserId(), mutation.collectionName, mutation.recordId);
+    const recordRef = doc(getDb(), 'users', getCurrentUserId(), mutation.collectionName, mutation.recordId);
 
     try {
       if (mutation.type === 'set') {
@@ -190,7 +190,7 @@ export const saveUserProfile = async ({ displayName, email }) => {
   const uid = getCurrentUserId();
 
   await setDoc(
-    doc(db, 'users', uid),
+    doc(getDb(), 'users', uid),
     {
       displayName,
       email: email ?? auth.currentUser?.email ?? '',
@@ -203,7 +203,7 @@ export const saveUserProfile = async ({ displayName, email }) => {
 
 export const saveExerciseRecord = async (exercise) => {
   const recordId = doc(userCollection('exerciseRecords')).id;
-  const recordRef = doc(db, 'users', getCurrentUserId(), 'exerciseRecords', recordId);
+  const recordRef = doc(getDb(), 'users', getCurrentUserId(), 'exerciseRecords', recordId);
   const nextRecord = createLocalRecord(exercise);
 
   await updateCachedRecords('exerciseRecords', (records) => [
@@ -227,8 +227,10 @@ export const saveExerciseRecord = async (exercise) => {
 };
 
 export const updateExerciseRecord = async (recordId, exercise) => {
+  const existingRecord = (await readCachedRecords('exerciseRecords')).find((record) => record.id === recordId);
   const nextRecord = createLocalRecord({
     ...exercise,
+    createdAt: existingRecord?.createdAt,
     updatedAt: new Date().toISOString(),
   });
 
@@ -262,7 +264,7 @@ export const deleteExerciseRecord = async (recordId) => {
 
 export const saveMeasurementRecord = async (measurement) => {
   const recordId = doc(userCollection('measurementRecords')).id;
-  const recordRef = doc(db, 'users', getCurrentUserId(), 'measurementRecords', recordId);
+  const recordRef = doc(getDb(), 'users', getCurrentUserId(), 'measurementRecords', recordId);
   const nextRecord = createLocalRecord(measurement);
 
   await updateCachedRecords('measurementRecords', (records) => [
@@ -286,8 +288,10 @@ export const saveMeasurementRecord = async (measurement) => {
 };
 
 export const updateMeasurementRecord = async (recordId, measurement) => {
+  const existingRecord = (await readCachedRecords('measurementRecords')).find((record) => record.id === recordId);
   const nextRecord = createLocalRecord({
     ...measurement,
+    createdAt: existingRecord?.createdAt,
     updatedAt: new Date().toISOString(),
   });
 
@@ -321,7 +325,7 @@ export const deleteMeasurementRecord = async (recordId) => {
 
 export const savePrRecord = async (pr) => {
   const recordId = doc(userCollection('prRecords')).id;
-  const recordRef = doc(db, 'users', getCurrentUserId(), 'prRecords', recordId);
+  const recordRef = doc(getDb(), 'users', getCurrentUserId(), 'prRecords', recordId);
   const nextRecord = createLocalRecord(pr);
 
   await updateCachedRecords('prRecords', (records) => [
@@ -345,8 +349,10 @@ export const savePrRecord = async (pr) => {
 };
 
 export const updatePrRecord = async (recordId, pr) => {
+  const existingRecord = (await readCachedRecords('prRecords')).find((record) => record.id === recordId);
   const nextRecord = createLocalRecord({
     ...pr,
+    createdAt: existingRecord?.createdAt,
     updatedAt: new Date().toISOString(),
   });
 
