@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { TouchableOpacity, StyleSheet, View, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { useSafeAreaInsets } from 'react-native-safe-area-context'; // ← ADD
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 
 import HomeScreen from '../screens/HomeScreen/page';
@@ -11,7 +11,6 @@ import PRScreen from '../screens/PRScreen/page';
 import MeasurementScreen from '../screens/MeasurementsScreen/page';
 import { navigationRef } from '../navigationRef';
 
-// ─── Design Tokens ────────────────────────────────────────────────────────────
 const C = {
   bg:     '#0C0C1A',
   tabBar: '#14142A',
@@ -23,7 +22,6 @@ const C = {
 
 const Tab = createBottomTabNavigator();
 
-// ─── Floating centre Add button ───────────────────────────────────────────────
 function AddButton({ onPress, isOpen, onClose }) {
   const handleNavigate = (routeName) => {
     onClose();
@@ -42,7 +40,7 @@ function AddButton({ onPress, isOpen, onClose }) {
 
   return (
     <View style={styles.addSlot} pointerEvents="box-none">
-      {isOpen ? (
+      {isOpen && (
         <View style={styles.addMenu} pointerEvents="box-none">
           <View style={styles.menuArc}>
             <TouchableOpacity
@@ -70,7 +68,7 @@ function AddButton({ onPress, isOpen, onClose }) {
             </TouchableOpacity>
           </View>
         </View>
-      ) : null}
+      )}
 
       <TouchableOpacity style={styles.addButton} onPress={onPress} activeOpacity={0.8}>
         <View style={styles.addButtonGlow} />
@@ -80,13 +78,15 @@ function AddButton({ onPress, isOpen, onClose }) {
   );
 }
 
-// ─── Navigator ────────────────────────────────────────────────────────────────
 export default function BottomTabNavigator() {
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
-  const insets = useSafeAreaInsets(); // ← ADD
+  const insets = useSafeAreaInsets();
 
-  // Base visible bar height (icons + labels) + safe area inset
-  const TAB_HEIGHT = 58 + insets.bottom; // ← DYNAMIC
+  const bottomInset = Platform.OS === 'android'
+    ? Math.max(insets.bottom, 16)
+    : insets.bottom;
+
+  const TAB_HEIGHT = 58 + bottomInset;
 
   return (
     <Tab.Navigator
@@ -98,8 +98,8 @@ export default function BottomTabNavigator() {
         tabBarLabelStyle: styles.tabLabel,
         tabBarStyle: {
           ...styles.tabBar,
-          height: TAB_HEIGHT,           // ← DYNAMIC HEIGHT
-          paddingBottom: insets.bottom, // ← DYNAMIC PADDING
+          height: TAB_HEIGHT,
+          paddingBottom: bottomInset,
         },
         tabBarBackground: () => <View style={styles.tabBarBg} />,
       }}
@@ -177,11 +177,9 @@ export default function BottomTabNavigator() {
   );
 }
 
-// ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
   tabBar: {
     position: 'absolute',
-    // height & paddingBottom are now set inline dynamically (see screenOptions)
     paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: C.border,
@@ -193,26 +191,22 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
     overflow: 'visible',
   },
-
   tabBarBg: {
     flex: 1,
     backgroundColor: C.tabBar,
     overflow: 'visible',
   },
-
   tabLabel: {
     fontSize: 11,
     fontWeight: '500',
     marginTop: 2,
   },
-
   addSlot: {
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
     overflow: 'visible',
   },
-
   addMenu: {
     position: 'absolute',
     bottom: 62,
@@ -222,13 +216,11 @@ const styles = StyleSheet.create({
     width: 176,
     height: 120,
   },
-
   menuArc: {
     position: 'relative',
     width: 176,
     height: 120,
   },
-
   menuButton: {
     position: 'absolute',
     width: 54,
@@ -245,11 +237,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.28,
     shadowRadius: 6,
   },
-
   menuButtonTop:   { top: 0,  left: 61, backgroundColor: '#20193A' },
   menuButtonLeft:  { top: 50, left: 12 },
   menuButtonRight: { top: 50, right: 12 },
-
   addButton: {
     top: -22,
     width: 62,
@@ -267,7 +257,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.55,
     shadowRadius: 10,
   },
-
   addButtonGlow: {
     position: 'absolute',
     width: 76,

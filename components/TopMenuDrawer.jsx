@@ -87,7 +87,7 @@ export default function TopMenuDrawer({ visible, onClose }) {
           <View style={[styles.separator, { backgroundColor: COLORS.border }]} />
 
           <View style={styles.list}>
-            <View style={[styles.actionRowSpace, { backgroundColor: COLORS.card, borderColor: COLORS.border }]}> 
+            {/* <View style={[styles.actionRowSpace, { backgroundColor: COLORS.card, borderColor: COLORS.border }]}>  */}
               {/* <View style={styles.leftActionRow}>
                 <View style={[styles.actionIconWrap, { backgroundColor: COLORS.purple }]}> 
                   <Icon name="theme-light-dark" size={18} color={COLORS.white} />
@@ -102,7 +102,7 @@ export default function TopMenuDrawer({ visible, onClose }) {
                   thumbColor={'#fff'}
                 />
               </View> */}
-            </View>
+            {/* </View> */}
 
             <TouchableOpacity
               style={[styles.actionRow, styles.logoutRow, { backgroundColor: COLORS.card, borderColor: COLORS.border }]}

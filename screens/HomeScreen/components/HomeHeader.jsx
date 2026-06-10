@@ -6,6 +6,8 @@ import { View, Text, TouchableOpacity, StyleSheet, Platform, StatusBar } from 'r
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { C } from '../Theme';
 
+
+
 export default function HomeHeader({ onMenuPress, onCalendarPress }) {
   return (
     <View style={styles.header}>
