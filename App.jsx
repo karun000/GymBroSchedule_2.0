@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, SafeAreaView, StyleSheet } from 'react-native';
+import { ActivityIndicator, StyleSheet } from 'react-native'; // ← remove SafeAreaView
 import { NavigationContainer } from '@react-navigation/native';
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'; // ← ADD
 import { auth } from './FireBase/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import BottomTabNavigator from './components/BottomNav';
@@ -26,37 +27,44 @@ export default function App() {
   // Still restoring session — show spinner
   if (user === undefined) {
     return (
-      <SafeAreaView style={styles.loadingShell}>
-        <ActivityIndicator size="large" color={Theme.colors.primary} />
-      </SafeAreaView>
+      <SafeAreaProvider> {/* ← WRAP */}
+        <SafeAreaView style={styles.loadingShell}>
+          <ActivityIndicator size="large" color={Theme.colors.primary} />
+        </SafeAreaView>
+      </SafeAreaProvider>
     );
   }
 
   // No session — show auth screens
   if (!user) {
-    return authMode === 'signin' ? (
-      <SignInScreen onSwitchToSignUp={() => setAuthMode('signup')} />
-    ) : (
-      <SignUpScreen onSwitchToSignIn={() => setAuthMode('signin')} />
+    return (
+      <SafeAreaProvider> {/* ← WRAP */}
+        {authMode === 'signin' ? (
+          <SignInScreen onSwitchToSignUp={() => setAuthMode('signup')} />
+        ) : (
+          <SignUpScreen onSwitchToSignIn={() => setAuthMode('signin')} />
+        )}
+      </SafeAreaProvider>
     );
   }
 
   // Session restored or just signed in — show main app
   return (
-    <ThemeProvider>
-      <DrawerProvider>
-        <NavigationContainer ref={navigationRef}>
-          <BottomTabNavigator />
-        </NavigationContainer>
+    <SafeAreaProvider> {/* ← WRAP */}
+      <ThemeProvider>
+        <DrawerProvider>
+          <NavigationContainer ref={navigationRef}>
+            <BottomTabNavigator />
+          </NavigationContainer>
 
-        {/* Global drawer tied to DrawerProvider */}
-        <DrawerContext.Consumer>
-          {({ visible, close }) => (
-            <TopMenuDrawer visible={visible} onClose={close} />
-          )}
-        </DrawerContext.Consumer>
-      </DrawerProvider>
-    </ThemeProvider>
+          <DrawerContext.Consumer>
+            {({ visible, close }) => (
+              <TopMenuDrawer visible={visible} onClose={close} />
+            )}
+          </DrawerContext.Consumer>
+        </DrawerProvider>
+      </ThemeProvider>
+    </SafeAreaProvider>
   );
 }
 

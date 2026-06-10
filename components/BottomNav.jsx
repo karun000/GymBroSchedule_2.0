@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { TouchableOpacity, StyleSheet, View, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
+import { useSafeAreaInsets } from 'react-native-safe-area-context'; // ← ADD
 import Icon from 'react-native-vector-icons/Ionicons';
 
 import HomeScreen from '../screens/HomeScreen/page';
@@ -10,17 +11,15 @@ import PRScreen from '../screens/PRScreen/page';
 import MeasurementScreen from '../screens/MeasurementsScreen/page';
 import { navigationRef } from '../navigationRef';
 
-// ─── Design Tokens (keep in sync with HomeScreen) ────────────────────────────
+// ─── Design Tokens ────────────────────────────────────────────────────────────
 const C = {
-  bg:         '#0C0C1A',
-  tabBar:     '#14142A',
-  border:     '#22223A',
-  purple:     '#7B5CC8',
-  gray:       '#6B6B80',
-  white:      '#FFFFFF',
+  bg:     '#0C0C1A',
+  tabBar: '#14142A',
+  border: '#22223A',
+  purple: '#7B5CC8',
+  gray:   '#6B6B80',
+  white:  '#FFFFFF',
 };
-
-const TAB_HEIGHT = Platform.OS === 'ios' ? 80 : 68;
 
 const Tab = createBottomTabNavigator();
 
@@ -28,18 +27,15 @@ const Tab = createBottomTabNavigator();
 function AddButton({ onPress, isOpen, onClose }) {
   const handleNavigate = (routeName) => {
     onClose();
-
     if (navigationRef.isReady()) {
       if (routeName === 'Measurements') {
         navigationRef.navigate('Measurements', { openMeasurementModal: true });
         return;
       }
-
       if (routeName === 'Weight') {
         navigationRef.navigate('Weight', { openPrModal: true });
         return;
       }
-
       navigationRef.navigate(routeName);
     }
   };
@@ -87,6 +83,10 @@ function AddButton({ onPress, isOpen, onClose }) {
 // ─── Navigator ────────────────────────────────────────────────────────────────
 export default function BottomTabNavigator() {
   const [isAddMenuOpen, setIsAddMenuOpen] = useState(false);
+  const insets = useSafeAreaInsets(); // ← ADD
+
+  // Base visible bar height (icons + labels) + safe area inset
+  const TAB_HEIGHT = 58 + insets.bottom; // ← DYNAMIC
 
   return (
     <Tab.Navigator
@@ -96,16 +96,18 @@ export default function BottomTabNavigator() {
         tabBarActiveTintColor: C.purple,
         tabBarInactiveTintColor: C.gray,
         tabBarLabelStyle: styles.tabLabel,
-        tabBarStyle: styles.tabBar,
+        tabBarStyle: {
+          ...styles.tabBar,
+          height: TAB_HEIGHT,           // ← DYNAMIC HEIGHT
+          paddingBottom: insets.bottom, // ← DYNAMIC PADDING
+        },
         tabBarBackground: () => <View style={styles.tabBarBg} />,
       }}
     >
       <Tab.Screen
         name="Home"
         component={HomeScreen}
-        listeners={{
-          tabPress: () => setIsAddMenuOpen(false),
-        }}
+        listeners={{ tabPress: () => setIsAddMenuOpen(false) }}
         options={{
           tabBarLabel: 'My Plan',
           tabBarIcon: ({ color, size }) => (
@@ -117,9 +119,7 @@ export default function BottomTabNavigator() {
       <Tab.Screen
         name="Schedules"
         component={ScheduleScreen}
-        listeners={{
-          tabPress: () => setIsAddMenuOpen(false),
-        }}
+        listeners={{ tabPress: () => setIsAddMenuOpen(false) }}
         options={{
           tabBarLabel: 'Schedules',
           tabBarIcon: ({ color, size }) => (
@@ -128,7 +128,6 @@ export default function BottomTabNavigator() {
         }}
       />
 
-      {/* ── Floating centre Add button ── */}
       <Tab.Screen
         name="Add"
         component={AddScreen}
@@ -154,9 +153,7 @@ export default function BottomTabNavigator() {
       <Tab.Screen
         name="Weight"
         component={PRScreen}
-        listeners={{
-          tabPress: () => setIsAddMenuOpen(false),
-        }}
+        listeners={{ tabPress: () => setIsAddMenuOpen(false) }}
         options={{
           tabBarLabel: 'PR',
           tabBarIcon: ({ color, size }) => (
@@ -168,9 +165,7 @@ export default function BottomTabNavigator() {
       <Tab.Screen
         name="Measurements"
         component={MeasurementScreen}
-        listeners={{
-          tabPress: () => setIsAddMenuOpen(false),
-        }}
+        listeners={{ tabPress: () => setIsAddMenuOpen(false) }}
         options={{
           tabBarLabel: 'Measures',
           tabBarIcon: ({ color, size }) => (
@@ -184,16 +179,13 @@ export default function BottomTabNavigator() {
 
 // ─── Styles ───────────────────────────────────────────────────────────────────
 const styles = StyleSheet.create({
-  // Tab bar shell
   tabBar: {
     position: 'absolute',
-    height: TAB_HEIGHT,
-    paddingBottom: Platform.OS === 'ios' ? 20 : 10,
+    // height & paddingBottom are now set inline dynamically (see screenOptions)
     paddingTop: 10,
     borderTopWidth: 1,
     borderTopColor: C.border,
     backgroundColor: C.tabBar,
-    // Drop shadow (Android elevation + iOS shadow)
     elevation: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -4 },
@@ -202,21 +194,18 @@ const styles = StyleSheet.create({
     overflow: 'visible',
   },
 
-  // Solid bg layer (used by tabBarBackground so the View sits behind items)
   tabBarBg: {
     flex: 1,
     backgroundColor: C.tabBar,
     overflow: 'visible',
   },
 
-  // Label typography
   tabLabel: {
     fontSize: 11,
     fontWeight: '500',
     marginTop: 2,
   },
 
-  // Floating "+" button
   addSlot: {
     flex: 1,
     alignItems: 'center',
@@ -257,21 +246,9 @@ const styles = StyleSheet.create({
     shadowRadius: 6,
   },
 
-  menuButtonTop: {
-    top: 0,
-    left: 61,
-    backgroundColor: '#20193A',
-  },
-
-  menuButtonLeft: {
-    top: 50,
-    left: 12,
-  },
-
-  menuButtonRight: {
-    top: 50,
-    right: 12,
-  },
+  menuButtonTop:   { top: 0,  left: 61, backgroundColor: '#20193A' },
+  menuButtonLeft:  { top: 50, left: 12 },
+  menuButtonRight: { top: 50, right: 12 },
 
   addButton: {
     top: -22,
@@ -282,10 +259,8 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     alignSelf: 'center',
-    // Halo border
     borderWidth: 3,
     borderColor: C.tabBar,
-    // Shadows
     elevation: 10,
     shadowColor: C.purple,
     shadowOffset: { width: 0, height: 4 },
@@ -293,7 +268,6 @@ const styles = StyleSheet.create({
     shadowRadius: 10,
   },
 
-  // Soft purple glow ring behind the button (iOS only, elevation handles Android)
   addButtonGlow: {
     position: 'absolute',
     width: 76,

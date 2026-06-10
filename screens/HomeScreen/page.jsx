@@ -7,6 +7,7 @@ import { ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 import { C }                from './Theme';
 import { navigationRef } from '../../navigationRef';
@@ -18,6 +19,8 @@ import DaySelector      from '../ScheduleScreen/components/Dayselector';
 import WeekSelector     from '../ScheduleScreen/components/Weekselector';
 import SavedWeightsCard from './components/Savedweightscard';
 import { fetchLatestUserRecords } from '../../FireBase/records';
+
+// ─── Constants ───────────────────────────────────────────────────────────────
 
 const DAY_LABELS = ['SUN', 'MON', 'TUE', 'WED', 'THU', 'FRI', 'SAT'];
 const DAY_NAMES = {
@@ -41,6 +44,10 @@ const WEEK_OPTIONS = [
 
 const HOME_WEEK_IDS = WEEK_OPTIONS.map((week) => week.id);
 
+// AsyncStorage keys used for week auto-advance
+const STORED_WEEK_KEY      = '@plan_active_week';
+const STORED_WEEK_DATE_KEY = '@plan_week_calendar_date';
+
 const muscleIcons = {
   Chest: 'dumbbell',
   Back: 'human-handsup',
@@ -55,7 +62,80 @@ const muscleIcons = {
   'Full Body': 'weight-lifter',
 };
 
+// ─── Week auto-advance helpers ────────────────────────────────────────────────
+
 const getTodayDayId = () => DAY_LABELS[new Date().getDay()];
+
+/**
+ * Returns a stable string that represents the start of the current calendar
+ * week (Monday 00:00:00), e.g. "Mon Jun 02 2025".
+ * Used to detect when a new real-world week has started.
+ */
+const getCalendarWeekTag = () => {
+  const now = new Date();
+  const sunday = new Date(now);
+  sunday.setDate(now.getDate() - now.getDay()); // now.getDay() === 0 on Sunday → no rewind needed
+  sunday.setHours(0, 0, 0, 0);
+  return sunday.toDateString(); // e.g. "Sun Jun 08 2025"
+};
+
+/**
+ * Reads the persisted active week from AsyncStorage and decides which week to
+ * show, following three rules:
+ *
+ *  1. First launch / stored week is no longer visible → use the first visible week.
+ *  2. A new calendar week has begun since the last save  → advance one step,
+ *     wrapping back to the first visible week after the last one.
+ *  3. Same calendar week as last save → keep the stored selection unchanged.
+ *
+ * The resolved week ID and today's calendar-week tag are always written back to
+ * storage before returning, so subsequent calls within the same week are stable.
+ *
+ * @param {Array<{id: string, label: string}>} visibleWeeks
+ *   Weeks that contain at least one exercise (already filtered).
+ * @returns {Promise<string|null>} Resolved week ID, or null when no weeks are visible.
+ */
+const resolveActiveWeek = async (visibleWeeks) => {
+  if (visibleWeeks.length === 0) return null;
+
+  const todayTag = getCalendarWeekTag();
+
+  try {
+    const [storedWeek, storedTag] = await Promise.all([
+      AsyncStorage.getItem(STORED_WEEK_KEY),
+      AsyncStorage.getItem(STORED_WEEK_DATE_KEY),
+    ]);
+
+    let activeWeekId;
+
+    if (!storedWeek || !visibleWeeks.some((w) => w.id === storedWeek)) {
+      // ① First launch or the stored week no longer exists in the plan.
+      activeWeekId = visibleWeeks[0].id;
+    } else if (storedTag !== todayTag) {
+      // ② A new calendar week has started → advance by one, with wrap-around.
+      const currentIndex = visibleWeeks.findIndex((w) => w.id === storedWeek);
+      const nextIndex    = (currentIndex + 1) % visibleWeeks.length; // wraps W5 → W1
+      activeWeekId       = visibleWeeks[nextIndex].id;
+    } else {
+      // ③ Same calendar week → honour the persisted selection.
+      activeWeekId = storedWeek;
+    }
+
+    // Persist the resolved week + today's tag so the next call in the same
+    // week returns the same answer without advancing again.
+    await Promise.all([
+      AsyncStorage.setItem(STORED_WEEK_KEY,      activeWeekId),
+      AsyncStorage.setItem(STORED_WEEK_DATE_KEY, todayTag),
+    ]);
+
+    return activeWeekId;
+  } catch {
+    // Storage failure → fall back to the first visible week.
+    return visibleWeeks[0].id;
+  }
+};
+
+// ─── Data-building helpers ────────────────────────────────────────────────────
 
 const buildDayCards = (records) => {
   const groupedByDay = DAY_LABELS.reduce((acc, dayId) => {
@@ -65,7 +145,6 @@ const buildDayCards = (records) => {
 
   records.forEach((record) => {
     const dayKey = DAY_LABELS.includes(record.dayOfWeek) ? record.dayOfWeek : 'MON';
-
     groupedByDay[dayKey].push(record);
   });
 
@@ -97,15 +176,14 @@ const buildWeekCards = (records) => {
   }, {});
 
   const sortedRecords = [...records].sort((left, right) => {
-    const leftTime = Date.parse(left?.createdAt ?? left?.updatedAt ?? 0) || 0;
+    const leftTime  = Date.parse(left?.createdAt  ?? left?.updatedAt  ?? 0) || 0;
     const rightTime = Date.parse(right?.createdAt ?? right?.updatedAt ?? 0) || 0;
-
     return leftTime - rightTime;
   });
 
   sortedRecords.forEach((record) => {
     const weekNumber = Number(record.week) || 1;
-    const weekKey = `W${Math.min(Math.max(weekNumber, 1), 5)}`;
+    const weekKey    = `W${Math.min(Math.max(weekNumber, 1), 5)}`;
     groupedByWeek[weekKey].push(record);
   });
 
@@ -125,114 +203,112 @@ const buildWeightPreview = (records) =>
     setsColor: index % 2 === 0 ? C.purpleSoft : C.purple,
   }));
 
-export default function HomeScreen() {
-  const tabBarHeight = useBottomTabBarHeight();
-  const [weekCards, setWeekCards] = useState({});
-  const [selectedWeek, setSelectedWeek] = useState('W1');
-  const [selectedDay, setSelectedDay] = useState(getTodayDayId());
-  const [weights, setWeights] = useState([]);
-
-  const visibleWeekOptions = HOME_WEEK_IDS
-    .map((weekId) => WEEK_OPTIONS.find((week) => week.id === weekId))
+/**
+ * Derives the list of weeks that have at least one exercise from a fresh
+ * weekCards map. Kept as a standalone function so both the state-derived
+ * value and the inside-effect computation share the same logic.
+ */
+const getVisibleWeeks = (cardsByWeek) =>
+  HOME_WEEK_IDS
+    .map((id) => WEEK_OPTIONS.find((w) => w.id === id))
     .filter((week) => {
-      const currentWeekCards = weekCards[week?.id] || {};
-
-      return Object.values(currentWeekCards).some((day) => day?.exercises?.length > 0);
+      const dayCards = cardsByWeek[week?.id] || {};
+      return Object.values(dayCards).some((day) => day?.exercises?.length > 0);
     });
 
-  const visibleWeekKey = visibleWeekOptions.map((week) => week.id).join(',');
+// ─── Component ────────────────────────────────────────────────────────────────
 
-  useEffect(() => {
-    let isActive = true;
+export default function HomeScreen() {
+  const tabBarHeight = useBottomTabBarHeight();
+  const [weekCards,    setWeekCards]    = useState({});
+  const [selectedWeek, setSelectedWeek] = useState('W1');
+  const [selectedDay,  setSelectedDay]  = useState(getTodayDayId());
+  const [weights,      setWeights]      = useState([]);
 
-    const loadHomeData = async () => {
-      try {
-        const [exerciseRecords, prRecords] = await Promise.all([
-          fetchLatestUserRecords('exerciseRecords', 100),
-          fetchLatestUserRecords('prRecords', 3),
-        ]);
+  // Derived from state – used for rendering only.
+  const visibleWeekOptions = getVisibleWeeks(weekCards);
+  const visibleWeekKey     = visibleWeekOptions.map((w) => w.id).join(',');
 
-        if (!isActive) {
-          return;
-        }
+  // ── Data loader (shared between the mount effect and useFocusEffect) ──────
+  const loadHomeData = useCallback(async (isActiveRef) => {
+    try {
+      const [exerciseRecords, prRecords] = await Promise.all([
+        fetchLatestUserRecords('exerciseRecords', 100),
+        fetchLatestUserRecords('prRecords', 3),
+      ]);
 
-        const cardsByWeek = buildWeekCards(exerciseRecords);
-        setWeekCards(cardsByWeek);
-        setWeights(buildWeightPreview(prRecords));
-      } catch (error) {
-        console.log('Failed to load home data:', error?.message ?? error);
-      }
-    };
+      if (!isActiveRef.current) return;
 
-    loadHomeData();
+      const cardsByWeek = buildWeekCards(exerciseRecords);
 
-    return () => {
-      isActive = false;
-    };
+      // Compute visible weeks from fresh data (not from stale state) so that
+      // resolveActiveWeek always receives an up-to-date list.
+      const visible = getVisibleWeeks(cardsByWeek);
+
+      // Determine the correct week, auto-advancing if a new calendar week began.
+      const activeWeek = await resolveActiveWeek(visible);
+
+      if (!isActiveRef.current) return;
+
+      setWeekCards(cardsByWeek);
+      setWeights(buildWeightPreview(prRecords));
+      if (activeWeek) setSelectedWeek(activeWeek);
+    } catch (error) {
+      console.log('Failed to load home data:', error?.message ?? error);
+    }
   }, []);
 
+  // Initial load on mount.
+  useEffect(() => {
+    const isActiveRef = { current: true };
+    loadHomeData(isActiveRef);
+    return () => { isActiveRef.current = false; };
+  }, [loadHomeData]);
+
+  // Reload (and re-check the week) every time the screen comes into focus.
   useFocusEffect(
     useCallback(() => {
-      let isActive = true;
-
-      const loadHomeData = async () => {
-        try {
-          const [exerciseRecords, prRecords] = await Promise.all([
-            fetchLatestUserRecords('exerciseRecords', 100),
-            fetchLatestUserRecords('prRecords', 3),
-          ]);
-
-          if (!isActive) {
-            return;
-          }
-
-          const cardsByWeek = buildWeekCards(exerciseRecords);
-          setWeekCards(cardsByWeek);
-          setWeights(buildWeightPreview(prRecords));
-        } catch (error) {
-          console.log('Failed to load home data:', error?.message ?? error);
-        }
-      };
-
-      loadHomeData();
-
-      return () => {
-        isActive = false;
-      };
-    }, [])
+      const isActiveRef = { current: true };
+      loadHomeData(isActiveRef);
+      return () => { isActiveRef.current = false; };
+    }, [loadHomeData])
   );
 
+  // Safety-net: if visible weeks change (e.g. user edits exercises) and
+  // the currently selected week disappears, fall back to the first visible one.
   useEffect(() => {
-    if (visibleWeekOptions.length === 0) {
-      return;
-    }
-
-    if (!visibleWeekOptions.some((week) => week.id === selectedWeek)) {
+    if (visibleWeekOptions.length === 0) return;
+    if (!visibleWeekOptions.some((w) => w.id === selectedWeek)) {
       setSelectedWeek(visibleWeekOptions[0].id);
     }
   }, [selectedWeek, visibleWeekKey]);
 
-  useEffect(() => {
-    const currentWeekCards = weekCards[selectedWeek] || {};
-    const todayDay = getTodayDayId();
-    const todayHasExercises = currentWeekCards[todayDay]?.exercises?.length > 0;
-    const firstAvailableDay = DAY_LABELS.find((day) => currentWeekCards[day]?.exercises?.length > 0);
+  // Auto-select the best day for the newly active week.
+useEffect(() => {
+  setSelectedDay(getTodayDayId());
+}, [selectedWeek]);
 
-    if (todayHasExercises) {
-      setSelectedDay(todayDay);
-      return;
+  // ── Handlers ──────────────────────────────────────────────────────────────
+
+  /**
+   * Manual week selection by the user.
+   * Persists both the chosen week AND today's calendar-week tag so that
+   * resolveActiveWeek won't advance again until the next real-world week.
+   */
+  const handleWeekPress = async (weekId) => {
+    setSelectedWeek(weekId);
+    try {
+      await Promise.all([
+        AsyncStorage.setItem(STORED_WEEK_KEY,      weekId),
+        AsyncStorage.setItem(STORED_WEEK_DATE_KEY, getCalendarWeekTag()),
+      ]);
+    } catch {
+      // Storage failure is non-fatal; the UI already updated optimistically.
     }
+  };
 
-    if (firstAvailableDay) {
-      setSelectedDay(firstAvailableDay);
-    }
-  }, [selectedWeek, weekCards]);
-
-  // ── Handlers (wire to navigation / state as needed) ──────────────────────
   const handleViewAll     = () => {
-    if (navigationRef.isReady()) {
-      navigationRef.navigate('Weight');
-    }
+    if (navigationRef.isReady()) navigationRef.navigate('Weight');
   };
   const handleAddExercise = () => console.log('Add exercise');
   const handleWeightRow   = (item) => console.log('Weight row pressed:', item.title);
@@ -272,7 +348,7 @@ export default function HomeScreen() {
           <WeekSelector
             weeks={visibleWeekOptions}
             activeWeek={selectedWeek}
-            onWeekPress={setSelectedWeek}
+            onWeekPress={handleWeekPress}
           />
         )}
 
@@ -296,12 +372,16 @@ export default function HomeScreen() {
         ) : visibleWeekOptions.length > 0 ? (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>No exercise for this day</Text>
-            <Text style={styles.emptyText}>Add an exercise in the Add screen and pick a day to see it here.</Text>
+            <Text style={styles.emptyText}>
+              Add an exercise in the Add screen and pick a day to see it here.
+            </Text>
           </View>
         ) : (
           <View style={styles.emptyCard}>
             <Text style={styles.emptyTitle}>No saved workouts yet</Text>
-            <Text style={styles.emptyText}>Add exercises to any week to show them here.</Text>
+            <Text style={styles.emptyText}>
+              Add exercises to any week to show them here.
+            </Text>
           </View>
         )}
 
