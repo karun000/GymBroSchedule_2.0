@@ -9,10 +9,15 @@ import {
   Platform,
 } from 'react-native';
 import { onAuthStateChanged } from 'firebase/auth';
-import { collection, getDocs } from 'firebase/firestore';
-import { auth, getDb } from '../../../FireBase/firebase';
+import { auth } from '../../../FireBase/firebase';
+import { fetchUserRecords } from '../../../FireBase/records';
 import { C } from '../Theme';
 import { BlurView } from '@react-native-community/blur';
+
+const parseNumericValue = (value) => {
+  const parsedValue = Number.parseFloat(value);
+  return Number.isFinite(parsedValue) ? parsedValue : null;
+};
 
 export default function GreetingSection({
   name: propName = 'Karun',
@@ -22,34 +27,26 @@ export default function GreetingSection({
   const [latestWeight, setLatestWeight] = useState(null); // { value, unit, dateISO }
   const [loading, setLoading]           = useState(true);
 
-  // ─── Auth listener + weight fetch (merged so uid is guaranteed) ────────────
   useEffect(() => {
     let cancelled = false;
 
-    const loadWeight = async (uid) => {
+    const loadWeight = async () => {
       try {
         setLoading(true);
 
-        const snapshot = await getDocs(
-          collection(getDb(), 'users', uid, 'measurementRecords')
-        );
+        // Cache-first: instant if cached, works offline, syncs to server only if cache empty
+        const records = await fetchUserRecords('measurementRecords');
 
-        const records = snapshot.docs.map((d) => ({ id: d.id, ...d.data() }));
-
-        // Sort newest-first by dateISO (same logic as MeasurementsScreenPage)
+        // Sort newest-first by dateISO (fallback to createdAt), same as MeasurementsScreenPage
         const sorted = [...records].sort((a, b) => {
           const toMs = (v) =>
             typeof v === 'string'             ? new Date(v).getTime()
             : typeof v?.toDate === 'function' ? v.toDate().getTime()
             : 0;
-          // prefer dateISO, fall back to createdAt
           return toMs(b.dateISO ?? b.createdAt) - toMs(a.dateISO ?? a.createdAt);
         });
 
-        // Records store weight as record.weight + record.weightUnit (not record.type)
-        const found = sorted.find(
-          (r) => r.weight != null && r.weight !== ''
-        );
+        const found = sorted.find((r) => parseNumericValue(r.weight) !== null);
 
         if (!cancelled) {
           setLatestWeight(
@@ -71,7 +68,7 @@ export default function GreetingSection({
         if (user) {
           const display = user.displayName || user.email?.split('@')[0] || propName;
           setName(display);
-          loadWeight(user.uid);
+          loadWeight();
         } else {
           setName(propName);
           setLatestWeight(null);
@@ -137,7 +134,7 @@ export default function GreetingSection({
           blurAmount={24}
           reducedTransparencyFallbackColor="rgba(20,20,42,0.92)"
         >
-            <CardContent />
+          <CardContent />
         </BlurView>
       ) : (
         <View style={[styles.card, styles.cardAndroid]}>
