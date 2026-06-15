@@ -25,5 +25,15 @@ service cloud.firestore {
         allow read, write: if isOwner(userId);
       }
     }
+
+    match /sharedSchedules/{scheduleId} {
+      allow read: if signedIn();
+      allow create: if signedIn()
+        && request.resource.data.sharedBy == request.auth.uid
+        && request.resource.data.exercises is list
+        && request.resource.data.exercises.size() > 0
+        && request.resource.data.exercises.size() <= 200;
+      allow update, delete: if false;
+    }
   }
 }

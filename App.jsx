@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, StyleSheet } from 'react-native'; // ← remove SafeAreaView
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { ActivityIndicator, Alert, Linking, StyleSheet } from 'react-native'; // ← remove SafeAreaView
 import { NavigationContainer } from '@react-navigation/native';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'; // ← ADD
 import { auth } from './FireBase/firebase';
@@ -12,10 +12,14 @@ import TopMenuDrawer from './components/TopMenuDrawer';
 import SignInScreen from './screens/Auth/page';
 import SignUpScreen from './screens/Auth/SignUpScreen';
 import Theme from './screens/Auth/Theme';
+import { fetchSharedSchedule, importExerciseRecords } from './FireBase/records';
+import { extractScheduleImportFromText } from './utils/scheduleShare';
 
 export default function App() {
   const [user, setUser] = useState(undefined);
   const [authMode, setAuthMode] = useState('signin');
+  const pendingImportUrlRef = useRef(null);
+  const importedShareIdsRef = useRef(new Set());
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
@@ -23,6 +27,109 @@ export default function App() {
     });
     return unsubscribe;
   }, []);
+
+  const importExercisesFromSchedule = useCallback(async (exercises, importKey) => {
+    if (!Array.isArray(exercises) || exercises.length === 0) {
+      Alert.alert('Nothing to import', 'This shared schedule does not include any exercises.');
+      return;
+    }
+
+    if (importedShareIdsRef.current.has(importKey)) {
+      return;
+    }
+
+    importedShareIdsRef.current.add(importKey);
+
+    try {
+      await importExerciseRecords(exercises);
+
+      Alert.alert(
+        'Schedule imported',
+        `${exercises.length} exercise${exercises.length === 1 ? '' : 's'} added to your schedule.`
+      );
+
+      if (navigationRef.isReady()) {
+        navigationRef.navigate('Schedules');
+      }
+    } catch (error) {
+      importedShareIdsRef.current.delete(importKey);
+      console.log('Failed to import shared schedule:', error?.message ?? error);
+      Alert.alert('Import failed', 'Could not import this shared schedule. Please try again.');
+    }
+  }, []);
+
+  const importSharedSchedule = useCallback(async (shareId) => {
+    if (!shareId) {
+      return;
+    }
+
+    if (importedShareIdsRef.current.has(shareId)) {
+      return;
+    }
+
+    importedShareIdsRef.current.add(shareId);
+
+    try {
+      const sharedSchedule = await fetchSharedSchedule(shareId);
+      const exercises = Array.isArray(sharedSchedule.exercises) ? sharedSchedule.exercises : [];
+
+      importedShareIdsRef.current.delete(shareId);
+      await importExercisesFromSchedule(exercises, shareId);
+    } catch (error) {
+      importedShareIdsRef.current.delete(shareId);
+      console.log('Failed to import shared schedule:', error?.message ?? error);
+      Alert.alert('Import failed', 'Could not import this shared schedule. Please try again.');
+    }
+  }, [importExercisesFromSchedule]);
+
+
+  const handleIncomingUrl = useCallback((url) => {
+    const scheduleImport = extractScheduleImportFromText(url);
+
+    if (!scheduleImport) {
+      return;
+    }
+
+    if (!auth.currentUser) {
+      pendingImportUrlRef.current = url;
+      Alert.alert('Sign in to import', 'Sign in first, then GymBro will import this shared schedule.');
+      return;
+    }
+
+    if (scheduleImport.type === 'inline') {
+      importExercisesFromSchedule(
+        scheduleImport.exercises,
+        `inline:${url.length}:${url.slice(-32)}`
+      );
+      return;
+    }
+
+    importSharedSchedule(scheduleImport.shareId);
+  }, [importExercisesFromSchedule, importSharedSchedule]);
+
+  useEffect(() => {
+    const subscription = Linking.addEventListener('url', ({ url }) => {
+      handleIncomingUrl(url);
+    });
+
+    return () => subscription.remove();
+  }, [handleIncomingUrl]);
+
+  useEffect(() => {
+    if (user === undefined) {
+      return;
+    }
+
+    Linking.getInitialURL().then(handleIncomingUrl).catch(() => {});
+  }, [handleIncomingUrl, user]);
+
+  useEffect(() => {
+    if (user && pendingImportUrlRef.current) {
+      const pendingUrl = pendingImportUrlRef.current;
+      pendingImportUrlRef.current = null;
+      handleIncomingUrl(pendingUrl);
+    }
+  }, [handleIncomingUrl, user]);
 
   // Still restoring session — show spinner
   if (user === undefined) {

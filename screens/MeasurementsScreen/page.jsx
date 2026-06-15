@@ -3,6 +3,7 @@ import {
   Alert,
   Modal,
   ScrollView,
+  RefreshControl,
   Pressable,
   View,
   Text,
@@ -95,45 +96,44 @@ const MeasurementsScreenPage = ({ navigation, route }) => {
   const [formMode, setFormMode] = useState('add');
   const [activeMeasurement, setActiveMeasurement] = useState(null);
   const [selectedDate, setSelectedDate] = useState(new Date());
+  const [refreshing, setRefreshing] = useState(false);
+
+  const reloadMeasurements = async (forceRefresh = false, isActiveRef = { current: true }) => {
+    const storedMeasurements = await fetchUserRecords('measurementRecords', { forceRefresh });
+
+    if (!isActiveRef.current) {
+      return;
+    }
+
+    const sortedMeasurements = storedMeasurements
+      .map((record) => ({
+        id: record.id,
+        dateISO: record.dateISO,
+        dateLabel: record.dateLabel,
+        height: record.height,
+        heightUnit: record.heightUnit,
+        weight: record.weight,
+        weightUnit: record.weightUnit,
+        bodyParts: record.bodyParts ?? {},
+      }))
+      .sort((left, right) => {
+        const leftTime = left.dateISO ? new Date(left.dateISO).getTime() : 0;
+        const rightTime = right.dateISO ? new Date(right.dateISO).getTime() : 0;
+        return rightTime - leftTime;
+      });
+
+    setMeasurementHistory(sortedMeasurements);
+  };
 
   useEffect(() => {
-    let isActive = true;
+    const isActiveRef = { current: true };
 
-    const loadMeasurementHistory = async () => {
-      try {
-        const storedMeasurements = await fetchUserRecords('measurementRecords');
-
-        if (!isActive) {
-          return;
-        }
-
-        const sortedMeasurements = storedMeasurements
-          .map((record) => ({
-            id: record.id,
-            dateISO: record.dateISO,
-            dateLabel: record.dateLabel,
-            height: record.height,
-            heightUnit: record.heightUnit,
-            weight: record.weight,
-            weightUnit: record.weightUnit,
-            bodyParts: record.bodyParts ?? {},
-          }))
-          .sort((left, right) => {
-            const leftTime = left.dateISO ? new Date(left.dateISO).getTime() : 0;
-            const rightTime = right.dateISO ? new Date(right.dateISO).getTime() : 0;
-            return rightTime - leftTime;
-          });
-
-        setMeasurementHistory(sortedMeasurements);
-      } catch (error) {
-        console.log('Failed to load saved measurements:', error?.message ?? error);
-      }
-    };
-
-    loadMeasurementHistory();
+    reloadMeasurements(false, isActiveRef).catch((error) => {
+      console.log('Failed to load saved measurements:', error?.message ?? error);
+    });
 
     return () => {
-      isActive = false;
+      isActiveRef.current = false;
     };
   }, []);
 
@@ -171,27 +171,16 @@ const MeasurementsScreenPage = ({ navigation, route }) => {
     setActiveMeasurement(null);
   };
 
-  const reloadMeasurements = async () => {
-    const storedMeasurements = await fetchUserRecords('measurementRecords');
+  const handleRefresh = async () => {
+    setRefreshing(true);
 
-    const sortedMeasurements = storedMeasurements
-      .map((record) => ({
-        id: record.id,
-        dateISO: record.dateISO,
-        dateLabel: record.dateLabel,
-        height: record.height,
-        heightUnit: record.heightUnit,
-        weight: record.weight,
-        weightUnit: record.weightUnit,
-        bodyParts: record.bodyParts ?? {},
-      }))
-      .sort((left, right) => {
-        const leftTime = left.dateISO ? new Date(left.dateISO).getTime() : 0;
-        const rightTime = right.dateISO ? new Date(right.dateISO).getTime() : 0;
-        return rightTime - leftTime;
-      });
-
-    setMeasurementHistory(sortedMeasurements);
+    try {
+      await reloadMeasurements(true);
+    } catch (error) {
+      console.log('Failed to refresh measurements:', error?.message ?? error);
+    } finally {
+      setRefreshing(false);
+    }
   };
 
   const weightTrendData = (() => {
@@ -285,6 +274,14 @@ const MeasurementsScreenPage = ({ navigation, route }) => {
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        refreshControl={(
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={Theme.colors.primary}
+            colors={[Theme.colors.primary]}
+          />
+        )}
       >
         <ProgressLineChart
           theme={Theme}

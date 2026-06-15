@@ -1,5 +1,5 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { collection, doc, getDocs, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
+import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { auth, getDb } from './firebase';
 
 const RECORD_CACHE_PREFIX = '@gymbro/record-cache';
@@ -226,6 +226,72 @@ export const saveExerciseRecord = async (exercise) => {
   return recordRef;
 };
 
+export const importExerciseRecords = async (exercises) => {
+  if (!Array.isArray(exercises) || exercises.length === 0) {
+    return [];
+  }
+
+  const importedRecords = exercises.map((exercise, index) => {
+    const recordId = doc(userCollection('exerciseRecords')).id;
+    const nextRecord = createLocalRecord({
+      name: exercise.name,
+      muscleGroup: exercise.muscleGroup,
+      equipment: exercise.equipment,
+      sets: exercise.sets,
+      reps: exercise.reps,
+      dayOfWeek: exercise.dayOfWeek,
+      week: exercise.week,
+      weekLabel: exercise.weekLabel ?? `W${Number(exercise.week) || 1}`,
+      order: Number.isFinite(Number(exercise.order)) ? Number(exercise.order) : index,
+    });
+
+    return {
+      id: recordId,
+      data: nextRecord,
+    };
+  });
+
+  await updateCachedRecords('exerciseRecords', (records) => [
+    ...records,
+    ...importedRecords.map((record) => ({
+      id: record.id,
+      ...record.data,
+    })),
+  ]);
+
+  for (const record of importedRecords) {
+    await enqueuePendingMutation({
+      type: 'set',
+      collectionName: 'exerciseRecords',
+      recordId: record.id,
+      data: record.data,
+    });
+  }
+
+  triggerPendingMutationSync();
+
+  return importedRecords.map((record) => doc(getDb(), 'users', getCurrentUserId(), 'exerciseRecords', record.id));
+};
+
+export const fetchSharedSchedule = async (shareId) => {
+  if (!shareId) {
+    throw new Error('Missing shared schedule id.');
+  }
+
+  const shareSnapshot = await getDoc(doc(getDb(), 'sharedSchedules', shareId));
+
+  if (!shareSnapshot.exists()) {
+    const error = new Error('Shared schedule was not found.');
+    error.code = 'shared-schedule/not-found';
+    throw error;
+  }
+
+  return {
+    id: shareSnapshot.id,
+    ...shareSnapshot.data(),
+  };
+};
+
 export const updateExerciseRecord = async (recordId, exercise) => {
   const existingRecord = (await readCachedRecords('exerciseRecords')).find((record) => record.id === recordId);
   const nextRecord = createLocalRecord({
@@ -382,12 +448,16 @@ export const deletePrRecord = async (recordId) => {
   triggerPendingMutationSync();
 };
 
-export const fetchUserRecords = async (collectionName) => {
-  triggerPendingMutationSync();
+export const fetchUserRecords = async (collectionName, options = {}) => {
+  if (options.forceRefresh) {
+    await triggerPendingMutationSync();
+  } else {
+    triggerPendingMutationSync();
+  }
 
   const cachedRecords = sortRecords(await readCachedRecords(collectionName));
 
-  if (cachedRecords.length > 0) {
+  if (cachedRecords.length > 0 && !options.forceRefresh) {
     return cachedRecords;
   }
 
@@ -401,8 +471,8 @@ export const fetchUserRecords = async (collectionName) => {
   }
 };
 
-export const fetchLatestUserRecords = async (collectionName, recordLimit = 5) => {
-  const records = await fetchUserRecords(collectionName);
+export const fetchLatestUserRecords = async (collectionName, recordLimit = 5, options = {}) => {
+  const records = await fetchUserRecords(collectionName, options);
 
   return sortRecords(records).slice(0, recordLimit);
 };

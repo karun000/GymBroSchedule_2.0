@@ -2,8 +2,8 @@
 // Entry point for the Home tab.
 // All UI logic is delegated to focused components; this file only composes them.
 
-import React, { useCallback, useEffect, useState } from 'react';
-import { ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { RefreshControl, ScrollView, StatusBar, StyleSheet, Text, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useFocusEffect } from '@react-navigation/native';
@@ -62,9 +62,48 @@ const muscleIcons = {
   'Full Body': 'weight-lifter',
 };
 
+const getRecordTime = (record) => {
+  const parsedTime = Date.parse(record?.createdAt ?? record?.updatedAt ?? 0);
+
+  return Number.isFinite(parsedTime) ? parsedTime : 0;
+};
+
+const getExerciseOrder = (exercise) => {
+  const parsedOrder = Number(exercise?.order);
+
+  return Number.isFinite(parsedOrder) ? parsedOrder : null;
+};
+
+const sortExercisesByOrder = (left, right) => {
+  const leftOrder = getExerciseOrder(left);
+  const rightOrder = getExerciseOrder(right);
+
+  if (leftOrder !== null && rightOrder !== null && leftOrder !== rightOrder) {
+    return leftOrder - rightOrder;
+  }
+
+  return getRecordTime(left) - getRecordTime(right);
+};
+
 // ─── Week auto-advance helpers ────────────────────────────────────────────────
 
 const getTodayDayId = () => DAY_LABELS[new Date().getDay()];
+
+const normalizeDayId = (dayOfWeek) => {
+  if (!dayOfWeek) {
+    return 'MON';
+  }
+
+  const upperValue = String(dayOfWeek).toUpperCase();
+
+  if (DAY_NAMES[upperValue]) {
+    return upperValue;
+  }
+
+  const matchedEntry = Object.entries(DAY_NAMES).find(([, label]) => label.toUpperCase() === upperValue);
+
+  return matchedEntry?.[0] || 'MON';
+};
 
 /**
  * Returns a stable string that represents the start of the current calendar
@@ -144,16 +183,17 @@ const buildDayCards = (records) => {
   }, {});
 
   records.forEach((record) => {
-    const dayKey = DAY_LABELS.includes(record.dayOfWeek) ? record.dayOfWeek : 'MON';
+    const dayKey = normalizeDayId(record.dayOfWeek);
     groupedByDay[dayKey].push(record);
   });
 
   return DAY_LABELS.reduce((acc, dayId) => {
-    const exercises = groupedByDay[dayId].map((record) => ({
+    const exercises = groupedByDay[dayId].sort(sortExercisesByOrder).map((record) => ({
       id: record.id,
       name: record.name,
       sets: record.sets,
       reps: record.reps,
+      order: getExerciseOrder(record),
       icon: muscleIcons[record.muscleGroup] || 'dumbbell',
     }));
 
@@ -175,11 +215,7 @@ const buildWeekCards = (records) => {
     return acc;
   }, {});
 
-  const sortedRecords = [...records].sort((left, right) => {
-    const leftTime  = Date.parse(left?.createdAt  ?? left?.updatedAt  ?? 0) || 0;
-    const rightTime = Date.parse(right?.createdAt ?? right?.updatedAt ?? 0) || 0;
-    return leftTime - rightTime;
-  });
+  const sortedRecords = [...records].sort(sortExercisesByOrder);
 
   sortedRecords.forEach((record) => {
     const weekNumber = Number(record.week) || 1;
@@ -224,17 +260,21 @@ export default function HomeScreen() {
   const [selectedWeek, setSelectedWeek] = useState('W1');
   const [selectedDay,  setSelectedDay]  = useState(getTodayDayId());
   const [weights,      setWeights]      = useState([]);
+  const [refreshing,   setRefreshing]   = useState(false);
 
   // Derived from state – used for rendering only.
-  const visibleWeekOptions = getVisibleWeeks(weekCards);
-  const visibleWeekKey     = visibleWeekOptions.map((w) => w.id).join(',');
+  const visibleWeekOptions = useMemo(() => getVisibleWeeks(weekCards), [weekCards]);
+  const visibleWeekKey     = useMemo(
+    () => visibleWeekOptions.map((w) => w.id).join(','),
+    [visibleWeekOptions]
+  );
 
   // ── Data loader (shared between the mount effect and useFocusEffect) ──────
-  const loadHomeData = useCallback(async (isActiveRef) => {
+  const loadHomeData = useCallback(async (isActiveRef, forceRefresh = false) => {
     try {
       const [exerciseRecords, prRecords] = await Promise.all([
-        fetchUserRecords('exerciseRecords'),
-        fetchLatestUserRecords('prRecords', 3),
+        fetchUserRecords('exerciseRecords', { forceRefresh }),
+        fetchLatestUserRecords('prRecords', 3, { forceRefresh }),
       ]);
 
       if (!isActiveRef.current) return;
@@ -257,6 +297,18 @@ export default function HomeScreen() {
       console.log('Failed to load home data:', error?.message ?? error);
     }
   }, []);
+
+  const handleRefresh = useCallback(async () => {
+    const isActiveRef = { current: true };
+
+    setRefreshing(true);
+
+    try {
+      await loadHomeData(isActiveRef, true);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadHomeData]);
 
   // Initial load on mount.
   useEffect(() => {
@@ -281,7 +333,7 @@ export default function HomeScreen() {
     if (!visibleWeekOptions.some((w) => w.id === selectedWeek)) {
       setSelectedWeek(visibleWeekOptions[0].id);
     }
-  }, [selectedWeek, visibleWeekKey]);
+  }, [selectedWeek, visibleWeekKey, visibleWeekOptions]);
 
   // Auto-select the best day for the newly active week.
 useEffect(() => {
@@ -332,6 +384,14 @@ useEffect(() => {
           { paddingBottom: tabBarHeight + 16 },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={(
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={C.purple}
+            colors={[C.purple]}
+          />
+        )}
       >
         {/* ③ Greeting */}
         <GreetingSection

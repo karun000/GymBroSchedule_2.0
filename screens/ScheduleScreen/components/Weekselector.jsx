@@ -3,7 +3,7 @@ import React from 'react';
 import { ScrollView, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { C } from '../Theme';
 
-export default function WeekSelector({ weeks, activeWeek, onWeekPress }) {
+export default function WeekSelector({ weeks, activeWeek, onWeekPress, onImportPress }) {
   return (
     <ScrollView
       horizontal
@@ -25,6 +25,15 @@ export default function WeekSelector({ weeks, activeWeek, onWeekPress }) {
           </TouchableOpacity>
         );
       })}
+      {onImportPress ? (
+        <TouchableOpacity
+          style={styles.importPill}
+          onPress={onImportPress}
+          activeOpacity={0.75}
+        >
+          <Text style={styles.importText}>Import</Text>
+        </TouchableOpacity>
+      ) : null}
     </ScrollView>
   );
 }
@@ -58,5 +67,22 @@ const styles = StyleSheet.create({
   },
   pillTextActive: {
     color: C.white,
+  },
+  importPill: {
+    height: 36,
+    borderRadius: 18,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: C.purple,
+    minWidth: 78,
+    alignItems: 'center',
+    justifyContent: 'center',
+    paddingHorizontal: 12,
+  },
+  importText: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: C.purple,
+    letterSpacing: 0.3,
   },
 });

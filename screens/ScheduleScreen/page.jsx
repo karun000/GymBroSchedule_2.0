@@ -2,11 +2,17 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import {
+  View,
+  Text,
   ScrollView,
+  RefreshControl,
   StatusBar,
   StyleSheet,
   Share,
   Alert,
+  Modal,
+  TextInput,
+  TouchableOpacity,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
@@ -21,7 +27,14 @@ import TopMenuDrawer from '../../components/TopMenuDrawer';
 import WeekSelector  from './components/Weekselector';
 import DayCard       from './components/Daycard';
 import ExerciseEditorModal from '../AddScreen/components/ExerciseEditorModal';
-import { deleteExerciseRecord, fetchLatestUserRecords, updateExerciseRecord } from '../../FireBase/records';
+import {
+  deleteExerciseRecord,
+  fetchSharedSchedule,
+  fetchUserRecords,
+  importExerciseRecords,
+  updateExerciseRecord,
+} from '../../FireBase/records';
+import { extractScheduleImportFromText, buildCompactScheduleUrl } from '../../utils/scheduleShare';
 
 const WEEKS = [
   { id: 'W1', label: 'Week 1' },
@@ -48,7 +61,21 @@ const DAY_ALIASES = Object.entries(DAY_NAMES).reduce((acc, [id, label]) => {
   return acc;
 }, {});
 
-const normalizeDayId = (dayOfWeek) => DAY_ALIASES[dayOfWeek] || 'MON';
+const normalizeDayId = (dayOfWeek) => {
+  if (!dayOfWeek) {
+    return 'MON';
+  }
+
+  const upperValue = String(dayOfWeek).toUpperCase();
+
+  if (DAY_NAMES[upperValue]) {
+    return upperValue;
+  }
+
+  const matchedEntry = Object.entries(DAY_NAMES).find(([, label]) => label.toUpperCase() === upperValue);
+
+  return matchedEntry?.[0] || DAY_ALIASES[dayOfWeek] || 'MON';
+};
 
 const normalizeWeekNumber = (weekValue) => {
   const parsedWeek = Number(weekValue);
@@ -78,6 +105,23 @@ const getExerciseTime = (exercise) => {
   return 0;
 };
 
+const getExerciseOrder = (exercise) => {
+  const parsedOrder = Number(exercise?.order);
+
+  return Number.isFinite(parsedOrder) ? parsedOrder : null;
+};
+
+const sortExercisesByOrder = (left, right) => {
+  const leftOrder = getExerciseOrder(left);
+  const rightOrder = getExerciseOrder(right);
+
+  if (leftOrder !== null && rightOrder !== null && leftOrder !== rightOrder) {
+    return leftOrder - rightOrder;
+  }
+
+  return getExerciseTime(left) - getExerciseTime(right);
+};
+
 const iconForMuscleGroup = (muscleGroup) => {
   const iconMap = {
     Chest: 'dumbbell',
@@ -102,16 +146,14 @@ const buildWeekCards = (records) => {
     return acc;
   }, {});
 
-  const sortedRecords = [...records].sort((left, right) => getExerciseTime(left) - getExerciseTime(right));
-
-  sortedRecords.forEach((record) => {
+  records.forEach((record) => {
     const dayKey = normalizeDayId(record.dayOfWeek);
 
     groupedByDay[dayKey].push(record);
   });
 
   return DAY_IDS.map((dayId) => {
-    const exercises = groupedByDay[dayId].map((record) => ({
+    const exercises = groupedByDay[dayId].sort(sortExercisesByOrder).map((record) => ({
       id: record.id,
       name: record.name,
       sets: record.sets,
@@ -120,6 +162,7 @@ const buildWeekCards = (records) => {
       equipment: record.equipment,
       dayOfWeek: record.dayOfWeek,
       week: record.week,
+      order: getExerciseOrder(record),
       icon: iconForMuscleGroup(record.muscleGroup),
     }));
 
@@ -145,13 +188,17 @@ export default function ScheduleScreen() {
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [allExerciseRecords, setAllExerciseRecords] = useState([]);
   const [isSharing, setIsSharing] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+  const [isImportVisible, setIsImportVisible] = useState(false);
+  const [importText, setImportText] = useState('');
+  const [isImporting, setIsImporting] = useState(false);
 
-  const loadSchedule = useCallback(async () => {
+  const loadSchedule = useCallback(async (forceRefresh = false) => {
     try {
-      const records = await fetchLatestUserRecords('exerciseRecords', 100);
-      setAllExerciseRecords(records);
+      const records = await fetchUserRecords('exerciseRecords', { forceRefresh });
+      const sortedRecords = [...records].sort(sortExercisesByOrder);
+      setAllExerciseRecords(sortedRecords);
 
-      const sortedRecords = [...records].sort((left, right) => getExerciseTime(left) - getExerciseTime(right));
       const grouped = { W1: [], W2: [], W3: [], W4: [], W5: [] };
 
       sortedRecords.forEach((record) => {
@@ -171,6 +218,16 @@ export default function ScheduleScreen() {
       console.log('Failed to load schedule data:', error?.message ?? error);
     }
   }, []);
+
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+
+    try {
+      await loadSchedule(true);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadSchedule]);
 
   useEffect(() => {
     loadSchedule();
@@ -209,6 +266,15 @@ export default function ScheduleScreen() {
   };
   const handleWeekPress = (id) => setActiveWeek(id);
 
+  const closeImportModal = () => {
+    if (isImporting) {
+      return;
+    }
+
+    setIsImportVisible(false);
+    setImportText('');
+  };
+
   // ── Share schedule ───────────────────────────────────────────────────────
   const handleShareSchedule = async () => {
     if (allExerciseRecords.length === 0) {
@@ -218,28 +284,38 @@ export default function ScheduleScreen() {
 
     setIsSharing(true);
 
-    try {
-      const exercisesPayload = allExerciseRecords.map((record) => ({
-        name: record.name,
-        sets: record.sets,
-        reps: record.reps,
-        muscleGroup: record.muscleGroup,
-        equipment: record.equipment,
-        dayOfWeek: record.dayOfWeek,
-        week: record.week,
-      }));
+    const exercisesPayload = allExerciseRecords.map((record) => ({
+      name: record.name,
+      sets: record.sets,
+      reps: record.reps,
+      muscleGroup: record.muscleGroup,
+      equipment: record.equipment,
+      dayOfWeek: record.dayOfWeek,
+      week: record.week,
+      order: getExerciseOrder(record),
+    }));
+    let shareUrl = null;
+    let usingCloudShare = false;
 
+    try {
       const shareRef = doc(collection(getDb(), 'sharedSchedules'));
 
       await setDoc(shareRef, {
         exercises: exercisesPayload,
+        exerciseCount: exercisesPayload.length,
         sharedBy: auth.currentUser?.uid ?? null,
         sharedByName: auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0] || 'A GymBro user',
         createdAt: new Date().toISOString(),
       });
 
-      const shareUrl = `gymbro://import-schedule/${shareRef.id}`;
+      shareUrl = `gymbro://import-schedule/${shareRef.id}`;
+      usingCloudShare = true;
+    } catch (error) {
+      console.log('Cloud share unavailable, falling back to inline share:', error?.message ?? error);
+      shareUrl = buildCompactScheduleUrl(exercisesPayload);
+    }
 
+    try {
       await Share.share({
         message: `Check out my workout schedule on GymBro!\n${shareUrl}`,
         title: 'Share Workout Schedule',
@@ -249,6 +325,46 @@ export default function ScheduleScreen() {
       Alert.alert('Share failed', 'Could not share your schedule. Please try again.');
     } finally {
       setIsSharing(false);
+    }
+  };
+
+  const handleImportSchedule = async () => {
+    const scheduleImport = extractScheduleImportFromText(importText);
+
+    if (!scheduleImport) {
+      Alert.alert('Import link missing', 'Paste the full GymBro share message or import link.');
+      return;
+    }
+
+    setIsImporting(true);
+
+    try {
+      let exercises = scheduleImport.exercises;
+
+      if (scheduleImport.type === 'cloud') {
+        const sharedSchedule = await fetchSharedSchedule(scheduleImport.shareId);
+        exercises = sharedSchedule.exercises;
+      }
+
+      if (!Array.isArray(exercises) || exercises.length === 0) {
+        Alert.alert('Nothing to import', 'This shared schedule does not include any exercises.');
+        return;
+      }
+
+      const importedRecords = await importExerciseRecords(exercises);
+      await loadSchedule();
+      setIsImportVisible(false);
+      setImportText('');
+
+      Alert.alert(
+        'Schedule imported',
+        `${importedRecords.length} exercise${importedRecords.length === 1 ? '' : 's'} added to your schedule.`
+      );
+    } catch (error) {
+      console.log('Failed to import pasted schedule:', error?.message ?? error);
+      Alert.alert('Import failed', 'Could not import this schedule. Check the link and try again.');
+    } finally {
+      setIsImporting(false);
     }
   };
 
@@ -277,6 +393,7 @@ export default function ScheduleScreen() {
       dayOfWeek: resolvedDayOfWeek,
       week: resolvedWeek,
       weekLabel: `W${resolvedWeek}`,
+      order: getExerciseOrder(updatedExercise),
     });
 
     setEditingExercise(null);
@@ -316,11 +433,20 @@ export default function ScheduleScreen() {
           { paddingBottom: tabBarHeight + 16 },
         ]}
         showsVerticalScrollIndicator={false}
+        refreshControl={(
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={C.purple}
+            colors={[C.purple]}
+          />
+        )}
       >
         <WeekSelector
           weeks={WEEKS}
           activeWeek={activeWeek}
           onWeekPress={handleWeekPress}
+          onImportPress={() => setIsImportVisible(true)}
         />
 
         {(weekCards[activeWeek] || []).map((day) => (
@@ -342,6 +468,50 @@ export default function ScheduleScreen() {
         onSave={handleSaveExerciseEdit}
         onDelete={handleDeleteExercise}
       />
+
+      <Modal
+        visible={isImportVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={closeImportModal}
+      >
+        <View style={styles.modalBackdrop}>
+          <View style={styles.importModal}>
+            <Text style={styles.modalTitle}>Import Schedule</Text>
+            <TextInput
+              value={importText}
+              onChangeText={setImportText}
+              placeholder="Paste GymBro share message or link"
+              placeholderTextColor={C.gray}
+              multiline
+              textAlignVertical="top"
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={styles.importInput}
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={styles.cancelButton}
+                onPress={closeImportModal}
+                disabled={isImporting}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.cancelButtonText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.confirmButton, isImporting && styles.disabledButton]}
+                onPress={handleImportSchedule}
+                disabled={isImporting}
+                activeOpacity={0.8}
+              >
+                <Text style={styles.confirmButtonText}>
+                  {isImporting ? 'Importing...' : 'Import'}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -360,5 +530,69 @@ const styles = StyleSheet.create({
   },
   dayCardSpacing: {
     marginTop: 12,
+  },
+  modalBackdrop: {
+    flex: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.68)',
+    paddingHorizontal: 20,
+  },
+  importModal: {
+    width: '100%',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#22223A',
+    backgroundColor: '#14142A',
+    padding: 18,
+  },
+  modalTitle: {
+    color: C.white,
+    fontSize: 20,
+    fontWeight: '700',
+    marginBottom: 12,
+  },
+  importInput: {
+    minHeight: 150,
+    maxHeight: 240,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#22223A',
+    backgroundColor: C.bg,
+    color: C.white,
+    fontSize: 14,
+    padding: 12,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 10,
+    marginTop: 14,
+  },
+  cancelButton: {
+    minHeight: 42,
+    justifyContent: 'center',
+    borderRadius: 8,
+    paddingHorizontal: 16,
+  },
+  cancelButtonText: {
+    color: C.gray,
+    fontSize: 14,
+    fontWeight: '700',
+  },
+  confirmButton: {
+    minHeight: 42,
+    justifyContent: 'center',
+    borderRadius: 8,
+    backgroundColor: C.purple,
+    paddingHorizontal: 18,
+  },
+  disabledButton: {
+    opacity: 0.65,
+  },
+  confirmButtonText: {
+    color: C.white,
+    fontSize: 14,
+    fontWeight: '700',
   },
 });

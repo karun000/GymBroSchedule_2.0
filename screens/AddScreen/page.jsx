@@ -1,14 +1,16 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
   Text,
   ScrollView,
+  RefreshControl,
   StyleSheet,
   StatusBar,
   Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
+import { BlurView } from '@react-native-community/blur';
 import Theme from './Theme';
 import { WEEKS } from './AddExerciseData';
 import WeekSelector from './components/WeekSelector';
@@ -69,11 +71,38 @@ const getExerciseTime = (exercise) => {
   return 0;
 };
 
-const page = ({ navigation }) => {
+const getExerciseOrder = (exercise) => {
+  const parsedOrder = Number(exercise?.order);
+
+  return Number.isFinite(parsedOrder) ? parsedOrder : null;
+};
+
+const sortExercisesByOrder = (left, right) => {
+  const leftOrder = getExerciseOrder(left);
+  const rightOrder = getExerciseOrder(right);
+
+  if (leftOrder !== null && rightOrder !== null && leftOrder !== rightOrder) {
+    return leftOrder - rightOrder;
+  }
+
+  return getExerciseTime(left) - getExerciseTime(right);
+};
+
+const reorderItems = (items, fromIndex, toIndex) => {
+  const nextItems = [...items];
+  const [movedItem] = nextItems.splice(fromIndex, 1);
+
+  nextItems.splice(toIndex, 0, movedItem);
+  return nextItems;
+};
+
+const AddExercisePage = () => {
   const tabBarHeight = useBottomTabBarHeight();
   const [selectedWeek, setSelectedWeek] = useState(1);
   const [selectedDay, setSelectedDay] = useState('SUN');
   const [editingExercise, setEditingExercise] = useState(null);
+  const [draggingExerciseId, setDraggingExerciseId] = useState(null);
+  const [refreshing, setRefreshing] = useState(false);
 
   const [exercisesByWeek, setExercisesByWeek] = useState({
     1: [],
@@ -83,13 +112,23 @@ const page = ({ navigation }) => {
     5: [],
   });
 
-  const weekExercises = exercisesByWeek[selectedWeek] || [];
-  const exercises = weekExercises.filter((exercise) => normalizeDayId(exercise.dayOfWeek) === selectedDay);
+  const weekExercises = useMemo(
+    () => exercisesByWeek[selectedWeek] || [],
+    [exercisesByWeek, selectedWeek]
+  );
+  const exercises = useMemo(
+    () => weekExercises
+      .filter((exercise) => normalizeDayId(exercise.dayOfWeek) === selectedDay)
+      .sort(sortExercisesByOrder),
+    [selectedDay, weekExercises]
+  );
+  const weekExercisesRef = useRef(weekExercises);
+  const latestOrderedExercisesRef = useRef(exercises);
 
-  const loadExercises = async () => {
+  const loadExercises = useCallback(async (forceRefresh = false) => {
     try {
-      const storedExercises = await fetchUserRecords('exerciseRecords');
-      const sortedExercises = [...storedExercises].sort((left, right) => getExerciseTime(left) - getExerciseTime(right));
+      const storedExercises = await fetchUserRecords('exerciseRecords', { forceRefresh });
+      const sortedExercises = [...storedExercises].sort(sortExercisesByOrder);
 
       const groupedExercises = { 1: [], 2: [], 3: [], 4: [], 5: [] };
 
@@ -110,6 +149,7 @@ const page = ({ navigation }) => {
             dayOfWeek: normalizedDay,
             week: exercise.week,
             weekLabel: exercise.weekLabel,
+            order: getExerciseOrder(exercise),
           },
         ];
       });
@@ -121,24 +161,40 @@ const page = ({ navigation }) => {
     } catch (error) {
       console.log('Failed to load saved exercises:', error?.message ?? error);
     }
-  };
-
-  useEffect(() => {
-    let isActive = true;
-
-    loadExercises();
-
-    return () => {
-      isActive = false;
-    };
   }, []);
 
+  const handleRefresh = useCallback(async () => {
+    setRefreshing(true);
+
+    try {
+      await loadExercises(true);
+    } finally {
+      setRefreshing(false);
+    }
+  }, [loadExercises]);
+
+  useEffect(() => {
+    loadExercises();
+  }, [loadExercises]);
+
+  useEffect(() => {
+    weekExercisesRef.current = weekExercises;
+    latestOrderedExercisesRef.current = exercises;
+  }, [exercises, weekExercises]);
+
   const handleAdd = async (newExercise) => {
+    const highestOrder = exercises.reduce((maxOrder, exercise) => {
+      const order = getExerciseOrder(exercise);
+
+      return order === null ? maxOrder : Math.max(maxOrder, order);
+    }, -1);
+    const nextOrder = highestOrder + 1;
     const savedExercise = await saveExerciseRecord({
       ...newExercise,
       week: selectedWeek,
       weekLabel: `W${selectedWeek}`,
       dayOfWeek: normalizeDayId(newExercise.dayOfWeek || selectedDay),
+      order: nextOrder,
     });
 
     setExercisesByWeek((prev) => ({
@@ -151,13 +207,14 @@ const page = ({ navigation }) => {
           week: selectedWeek,
           weekLabel: `W${selectedWeek}`,
           dayOfWeek: normalizeDayId(newExercise.dayOfWeek || selectedDay),
+          order: nextOrder,
         },
       ],
     }));
   };
 
   const handleMenuPress = (exerciseId) => {
-    const currentWeekExercises = exercisesByWeek[selectedWeek] || [];
+    const currentWeekExercises = weekExercisesRef.current || [];
     const matchedExercise = currentWeekExercises.find((exercise) => exercise.id === exerciseId);
 
     if (matchedExercise) {
@@ -178,10 +235,79 @@ const page = ({ navigation }) => {
       dayOfWeek: resolvedDay,
       week: resolvedWeek,
       weekLabel: `W${resolvedWeek}`,
+      order: getExerciseOrder(updatedExercise),
     });
 
     setEditingExercise(null);
     await loadExercises();
+  };
+
+  const persistExerciseOrder = async (orderedExercises) => {
+    await Promise.all(
+      orderedExercises.map((exercise, index) =>
+        updateExerciseRecord(exercise.id, {
+          name: exercise.name,
+          muscleGroup: exercise.muscleGroup,
+          equipment: exercise.equipment,
+          sets: exercise.sets,
+          reps: exercise.reps,
+          dayOfWeek: normalizeDayId(exercise.dayOfWeek),
+          week: exercise.week || selectedWeek,
+          weekLabel: `W${exercise.week || selectedWeek}`,
+          order: index,
+        })
+      )
+    );
+  };
+
+  const handleExerciseDragMove = (fromIndex, toIndex) => {
+    if (fromIndex === toIndex) {
+      return latestOrderedExercisesRef.current;
+    }
+
+    const currentWeekExercises = weekExercisesRef.current || [];
+    const dayExercises = currentWeekExercises
+      .filter((exercise) => normalizeDayId(exercise.dayOfWeek) === selectedDay)
+      .sort(sortExercisesByOrder);
+    const nextDayExercises = reorderItems(dayExercises, fromIndex, toIndex).map((exercise, index) => ({
+      ...exercise,
+      order: index,
+    }));
+    const reorderedIds = new Set(nextDayExercises.map((exercise) => exercise.id));
+    const nextWeekExercises = [
+      ...currentWeekExercises.filter((exercise) => !reorderedIds.has(exercise.id)),
+      ...nextDayExercises,
+    ].sort(sortExercisesByOrder);
+
+    latestOrderedExercisesRef.current = nextDayExercises;
+    weekExercisesRef.current = nextWeekExercises;
+
+    setExercisesByWeek((prev) => ({
+      ...prev,
+      [selectedWeek]: nextWeekExercises,
+    }));
+
+    return nextDayExercises;
+  };
+
+  const handleExerciseDragStart = (exerciseId) => {
+    setDraggingExerciseId(exerciseId);
+  };
+
+  const handleExerciseDragEnd = async (fromIndex, toIndex) => {
+    const nextOrderedExercises = handleExerciseDragMove(fromIndex, toIndex);
+
+    setDraggingExerciseId(null);
+
+    try {
+      if (fromIndex !== toIndex) {
+        await persistExerciseOrder(nextOrderedExercises);
+      }
+    } catch (error) {
+      console.log('Failed to save exercise order:', error?.message ?? error);
+      Alert.alert('Order not saved', 'Unable to save the new exercise order right now.');
+      await loadExercises();
+    }
   };
 
   const handleDeleteExercise = async (exerciseId) => {
@@ -214,6 +340,15 @@ const page = ({ navigation }) => {
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        scrollEnabled={!draggingExerciseId}
+        refreshControl={(
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={Theme.colors.primary}
+            colors={[Theme.colors.primary]}
+          />
+        )}
       >
         <CreateExerciseForm
           selectedWeek={selectedWeek}
@@ -228,11 +363,24 @@ const page = ({ navigation }) => {
               WEEK {selectedWeek} - {DAY_LABELS[selectedDay] || selectedDay} EXERCISES
             </Text>
             <View style={styles.listCard}>
+              {!!draggingExerciseId && (
+                <BlurView
+                  pointerEvents="none"
+                  style={styles.dragBlur}
+                  blurType="dark"
+                  blurAmount={8}
+                  reducedTransparencyFallbackColor={Theme.colors.card}
+                />
+              )}
               {exercises.map((ex, i) => (
                 <ExerciseListItem
                   key={ex.id}
                   exercise={ex}
                   index={i}
+                  itemCount={exercises.length}
+                  isDragging={draggingExerciseId === ex.id}
+                  onDragStart={handleExerciseDragStart}
+                  onDragEnd={handleExerciseDragEnd}
                   onMenuPress={handleMenuPress}
                 />
               ))}
@@ -285,7 +433,12 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: Theme.colors.cardBorder,
     overflow: 'hidden',
+    position: 'relative',
+  },
+  dragBlur: {
+    ...StyleSheet.absoluteFillObject,
+    zIndex: 10,
   },
 });
 
-export default page;
+export default AddExercisePage;

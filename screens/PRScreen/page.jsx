@@ -3,6 +3,7 @@ import {
   View,
   Text,
   ScrollView,
+  RefreshControl,
   Modal,
   Pressable,
   StyleSheet,
@@ -25,48 +26,59 @@ const PRScreenPage = ({ navigation, route }) => {
   const [prHistory, setPrHistory] = useState([]);
   const [editingPr, setEditingPr] = useState(null);
   const [isFormVisible, setIsFormVisible] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const loadPrHistory = async (forceRefresh = false, isActiveRef = { current: true }) => {
+    try {
+      const storedPrs = await fetchUserRecords('prRecords', { forceRefresh });
+
+      if (!isActiveRef.current) {
+        return;
+      }
+
+      const sortedPrs = storedPrs
+        .map((record) => ({
+          id: record.id,
+          name: record.name,
+          weight: record.weight,
+          unit: record.unit,
+          repMax: record.repMax,
+          muscleGroup: record.muscleGroup,
+          dateRange: record.dateRange,
+          dateISO: record.dateISO,
+          icon: record.icon ?? 'dumbbell',
+        }))
+        .sort((left, right) => {
+          const leftTime = left.dateISO ? new Date(left.dateISO).getTime() : 0;
+          const rightTime = right.dateISO ? new Date(right.dateISO).getTime() : 0;
+          return rightTime - leftTime;
+        });
+
+      setPrHistory(sortedPrs);
+    } catch (error) {
+      console.log('Failed to load saved PRs:', error?.message ?? error);
+    }
+  };
 
   useEffect(() => {
-    let isActive = true;
+    const isActiveRef = { current: true };
 
-    const loadPrHistory = async () => {
-      try {
-        const storedPrs = await fetchUserRecords('prRecords');
-
-        if (!isActive || storedPrs.length === 0) {
-          return;
-        }
-
-        const sortedPrs = storedPrs
-          .map((record) => ({
-            id: record.id,
-            name: record.name,
-            weight: record.weight,
-            unit: record.unit,
-            repMax: record.repMax,
-            muscleGroup: record.muscleGroup,
-            dateRange: record.dateRange,
-            dateISO: record.dateISO,
-            icon: record.icon ?? 'dumbbell',
-          }))
-          .sort((left, right) => {
-            const leftTime = left.dateISO ? new Date(left.dateISO).getTime() : 0;
-            const rightTime = right.dateISO ? new Date(right.dateISO).getTime() : 0;
-            return rightTime - leftTime;
-          });
-
-        setPrHistory(sortedPrs);
-      } catch (error) {
-        console.log('Failed to load saved PRs:', error?.message ?? error);
-      }
-    };
-
-    loadPrHistory();
+    loadPrHistory(false, isActiveRef);
 
     return () => {
-      isActive = false;
+      isActiveRef.current = false;
     };
   }, []);
+
+  const handleRefresh = async () => {
+    setRefreshing(true);
+
+    try {
+      await loadPrHistory(true);
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   useEffect(() => {
     if (route?.params?.openPrModal) {
@@ -190,6 +202,14 @@ const PRScreenPage = ({ navigation, route }) => {
         ]}
         showsVerticalScrollIndicator={false}
         keyboardShouldPersistTaps="handled"
+        refreshControl={(
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={handleRefresh}
+            tintColor={Theme.colors.primary}
+            colors={[Theme.colors.primary]}
+          />
+        )}
       >
         <ProgressLineChart
           theme={Theme}
