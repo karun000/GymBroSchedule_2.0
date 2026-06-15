@@ -1,8 +1,5 @@
 // ─── components/ScheduleHeader.jsx ───────────────────────────────────────────
-// Top bar: hamburger menu | "Schedule" + subtitle | "+ New Schedule" button
-// Props:
-//   onMenuPress      (func) – hamburger press handler
-//   onNewSchedule    (func) – "+ New Schedule" press handler
+
 
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Platform } from 'react-native';

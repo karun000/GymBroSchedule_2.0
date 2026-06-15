@@ -1,21 +1,20 @@
 // ─── page.jsx (ScheduleScreen) ────────────────────────────────────────────────
-// Entry point for the Schedule tab.
-// Manages two pieces of state:
-//   activeDay  – which day pill is highlighted
-//   expanded   – which day card is currently open (only one at a time)
-// All UI is delegated to focused sub-components.
 
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ScrollView,
   StatusBar,
   StyleSheet,
+  Share,
+  Alert,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { doc, setDoc, collection } from 'firebase/firestore';
 
 import { C }    from './Theme';
+import { auth, getDb } from '../../FireBase/firebase';
 
 import NavHeader     from '../../components/NavHeader';
 import TopMenuDrawer from '../../components/TopMenuDrawer';
@@ -139,15 +138,19 @@ export default function ScheduleScreen() {
   const navigation = useNavigation();
 
   // ── State ─────────────────────────────────────────────────────────────────
-  const [expandedId, setExpandedId] = useState(getTodayDayId());   // open accordion card
-  const [activeWeek, setActiveWeek] = useState('W1');    // highlighted week pill
+  const [expandedId, setExpandedId] = useState(getTodayDayId());
+  const [activeWeek, setActiveWeek] = useState('W1');
   const [weekCards, setWeekCards] = useState({ W1: [], W2: [], W3: [], W4: [], W5: [] });
   const [editingExercise, setEditingExercise] = useState(null);
   const [isDrawerVisible, setIsDrawerVisible] = useState(false);
+  const [allExerciseRecords, setAllExerciseRecords] = useState([]);
+  const [isSharing, setIsSharing] = useState(false);
 
   const loadSchedule = useCallback(async () => {
     try {
       const records = await fetchLatestUserRecords('exerciseRecords', 100);
+      setAllExerciseRecords(records);
+
       const sortedRecords = [...records].sort((left, right) => getExerciseTime(left) - getExerciseTime(right));
       const grouped = { W1: [], W2: [], W3: [], W4: [], W5: [] };
 
@@ -200,13 +203,54 @@ export default function ScheduleScreen() {
     setExpandedId((prev) => (prev === id ? null : id));
   };
 
-  // Debug helper: confirm menu press is triggered in runtime
-  // (visible in Metro / device logs)
   const debugHandleMenuPress = () => {
     console.log('ScheduleScreen: menu pressed — opening drawer');
     setIsDrawerVisible(true);
   };
-  const handleWeekPress     = (id) => setActiveWeek(id);
+  const handleWeekPress = (id) => setActiveWeek(id);
+
+  // ── Share schedule ───────────────────────────────────────────────────────
+  const handleShareSchedule = async () => {
+    if (allExerciseRecords.length === 0) {
+      Alert.alert('Nothing to share', 'Add some exercises to your schedule first.');
+      return;
+    }
+
+    setIsSharing(true);
+
+    try {
+      const exercisesPayload = allExerciseRecords.map((record) => ({
+        name: record.name,
+        sets: record.sets,
+        reps: record.reps,
+        muscleGroup: record.muscleGroup,
+        equipment: record.equipment,
+        dayOfWeek: record.dayOfWeek,
+        week: record.week,
+      }));
+
+      const shareRef = doc(collection(getDb(), 'sharedSchedules'));
+
+      await setDoc(shareRef, {
+        exercises: exercisesPayload,
+        sharedBy: auth.currentUser?.uid ?? null,
+        sharedByName: auth.currentUser?.displayName || auth.currentUser?.email?.split('@')[0] || 'A GymBro user',
+        createdAt: new Date().toISOString(),
+      });
+
+      const shareUrl = `gymbro://import-schedule/${shareRef.id}`;
+
+      await Share.share({
+        message: `Check out my workout schedule on GymBro!\n${shareUrl}`,
+        title: 'Share Workout Schedule',
+      });
+    } catch (error) {
+      console.log('Failed to share schedule:', error?.message ?? error);
+      Alert.alert('Share failed', 'Could not share your schedule. Please try again.');
+    } finally {
+      setIsSharing(false);
+    }
+  };
 
   const drawerActions = [
     { id: 'home', label: 'My Plan', icon: 'home-outline', onPress: () => navigation.navigate('Home') },
@@ -251,12 +295,12 @@ export default function ScheduleScreen() {
     <SafeAreaView style={styles.root}>
       <StatusBar barStyle="light-content" backgroundColor={C.bg} />
 
-      {/* ① Top bar */}
       <NavHeader
         title="Schedule"
         subtitle="Your workout plan for the week"
         onLeftPress={debugHandleMenuPress}
-        
+        rightIcon={isSharing ? 'loading' : 'share-variant'}
+        onRightPress={handleShareSchedule}
       />
 
       <TopMenuDrawer
@@ -265,7 +309,6 @@ export default function ScheduleScreen() {
         actions={drawerActions}
       />
 
-      {/* ③ Accordion day cards */}
       <ScrollView
         style={styles.scroll}
         contentContainerStyle={[
@@ -274,7 +317,6 @@ export default function ScheduleScreen() {
         ]}
         showsVerticalScrollIndicator={false}
       >
-        {/* Week pills included inside ScrollView so there's no extra gap */}
         <WeekSelector
           weeks={WEEKS}
           activeWeek={activeWeek}
@@ -288,7 +330,7 @@ export default function ScheduleScreen() {
             expanded={expandedId === day.id}
             onToggle={() => handleToggle(day.id)}
             onExOptions={handleExerciseMenuPress}
-            style={styles.dayCardSpacing}   
+            style={styles.dayCardSpacing}
           />
         ))}
       </ScrollView>
@@ -319,6 +361,4 @@ const styles = StyleSheet.create({
   dayCardSpacing: {
     marginTop: 12,
   },
-
 });
-    

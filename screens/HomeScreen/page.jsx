@@ -18,7 +18,7 @@ import DayCard          from '../ScheduleScreen/components/Daycard';
 import DaySelector      from '../ScheduleScreen/components/Dayselector';
 import WeekSelector     from '../ScheduleScreen/components/Weekselector';
 import SavedWeightsCard from './components/Savedweightscard';
-import { fetchLatestUserRecords } from '../../FireBase/records';
+import { fetchUserRecords, fetchLatestUserRecords } from '../../FireBase/records';
 
 // ─── Constants ───────────────────────────────────────────────────────────────
 
@@ -233,7 +233,7 @@ export default function HomeScreen() {
   const loadHomeData = useCallback(async (isActiveRef) => {
     try {
       const [exerciseRecords, prRecords] = await Promise.all([
-        fetchLatestUserRecords('exerciseRecords', 100),
+        fetchUserRecords('exerciseRecords'),
         fetchLatestUserRecords('prRecords', 3),
       ]);
 
