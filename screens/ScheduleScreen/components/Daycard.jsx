@@ -21,6 +21,7 @@ export default function DayCard({
   onExOptions,
   showExpandIcon = true,
   showMoreIcon = true,
+  showEquipment = true,
 }) {
   const count = day.exercises.length;
 
@@ -72,6 +73,7 @@ export default function DayCard({
               last={i === count - 1}
               onOptions={onExOptions}
               showMoreIcon={showMoreIcon}
+              showEquipment={showEquipment}
             />
           ))}
         </View>

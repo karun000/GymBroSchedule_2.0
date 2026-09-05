@@ -71,15 +71,19 @@ const getRecordTime = (record) => {
 const getExerciseOrder = (exercise) => {
   const parsedOrder = Number(exercise?.order);
 
-  return Number.isFinite(parsedOrder) ? parsedOrder : null;
+  return Number.isFinite(parsedOrder) ? Math.trunc(parsedOrder) : null;
 };
 
 const sortExercisesByOrder = (left, right) => {
   const leftOrder = getExerciseOrder(left);
   const rightOrder = getExerciseOrder(right);
 
-  if (leftOrder !== null && rightOrder !== null && leftOrder !== rightOrder) {
-    return leftOrder - rightOrder;
+  if (leftOrder !== null && rightOrder !== null) {
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
+  } else if (leftOrder !== null || rightOrder !== null) {
+    return leftOrder === null ? 1 : -1;
   }
 
   return getRecordTime(left) - getRecordTime(right);
@@ -193,6 +197,7 @@ const buildDayCards = (records) => {
       name: record.name,
       sets: record.sets,
       reps: record.reps,
+      equipment: record.equipment, // <-- Added equipment here
       order: getExerciseOrder(record),
       icon: muscleIcons[record.muscleGroup] || 'dumbbell',
     }));
@@ -336,9 +341,9 @@ export default function HomeScreen() {
   }, [selectedWeek, visibleWeekKey, visibleWeekOptions]);
 
   // Auto-select the best day for the newly active week.
-useEffect(() => {
-  setSelectedDay(getTodayDayId());
-}, [selectedWeek]);
+  useEffect(() => {
+    setSelectedDay(getTodayDayId());
+  }, [selectedWeek]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
 
@@ -428,6 +433,7 @@ useEffect(() => {
             onExOptions={(item) => console.log('Options for:', item.name)}
             showExpandIcon={false}
             showMoreIcon={false}
+            showEquipment
           />
         ) : visibleWeekOptions.length > 0 ? (
           <View style={styles.emptyCard}>

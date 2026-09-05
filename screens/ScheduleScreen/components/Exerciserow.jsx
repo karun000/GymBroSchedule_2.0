@@ -4,7 +4,11 @@ import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { C } from '../Theme';
 
-export default function ExerciseRow({ item, last, onOptions, showMoreIcon = true }) {
+export default function ExerciseRow({ item, last, onOptions, showMoreIcon = true, showEquipment = false }) {
+  const equipmentText = showEquipment && item?.equipment && String(item.equipment).trim() && String(item.equipment).toLowerCase() !== 'bodyweight'
+    ? item.equipment
+    : null;
+
   return (
     <View style={[styles.row, !last && styles.rowBorder]}>
       {/* Icon placeholder */}
@@ -16,7 +20,7 @@ export default function ExerciseRow({ item, last, onOptions, showMoreIcon = true
       <View style={styles.info}>
         <Text style={styles.name}>{item.name}</Text>
         <Text style={styles.meta}>
-          {item.sets} sets • {item.reps} reps
+          {item.sets} sets • {item.reps} reps{equipmentText ? ` • ${equipmentText}` : ''}
         </Text>
       </View>
 

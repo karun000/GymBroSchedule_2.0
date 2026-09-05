@@ -7,6 +7,23 @@ const PENDING_MUTATIONS_PREFIX = '@gymbro/pending-record-mutations';
 
 let pendingSyncPromise = null;
 
+// Per-user lock chain that guarantees enqueuePendingMutation and
+// runPendingMutations never read/modify/write the pending-mutations
+// AsyncStorage key concurrently. Without this, a mutation queued while a
+// background sync is in-flight can be silently dropped (see below).
+const pendingMutationLocks = new Map();
+
+const withPendingMutationsLock = (userId, task) => {
+  const previousLink = pendingMutationLocks.get(userId) || Promise.resolve();
+  const resultPromise = previousLink.then(() => task());
+
+  // Keep the chain alive even if a task throws, so future callers aren't
+  // stuck waiting on a rejected promise forever.
+  pendingMutationLocks.set(userId, resultPromise.catch(() => {}));
+
+  return resultPromise;
+};
+
 const getCurrentUserId = () => {
   const uid = auth.currentUser?.uid;
 
@@ -72,7 +89,30 @@ const getRecordTime = (record) => {
   return 0;
 };
 
-const sortRecords = (records) => [...records].sort((left, right) => getRecordTime(right) - getRecordTime(left));
+const getRecordOrder = (record) => {
+  const parsedOrder = Number(record?.order);
+
+  return Number.isFinite(parsedOrder) ? Math.trunc(parsedOrder) : null;
+};
+
+const sortRecords = (records, collectionName = '') => [...records].sort((left, right) => {
+  if (collectionName === 'exerciseRecords') {
+    const leftOrder = getRecordOrder(left);
+    const rightOrder = getRecordOrder(right);
+
+    if (leftOrder !== null && rightOrder !== null) {
+      if (leftOrder !== rightOrder) {
+        return leftOrder - rightOrder;
+      }
+    } else if (leftOrder !== null) {
+      return -1;
+    } else if (rightOrder !== null) {
+      return 1;
+    }
+  }
+
+  return getRecordTime(right) - getRecordTime(left);
+});
 
 const readJsonValue = async (key, fallbackValue) => {
   const storedValue = await AsyncStorage.getItem(key);
@@ -99,7 +139,7 @@ const readCachedRecords = async (collectionName) => {
 };
 
 const writeCachedRecords = async (collectionName, records) => {
-  await writeJsonValue(getCacheKey(collectionName), sortRecords(records.map(normalizeRecord)));
+  await writeJsonValue(getCacheKey(collectionName), sortRecords(records.map(normalizeRecord), collectionName));
 };
 
 const updateCachedRecords = async (collectionName, updater) => {
@@ -120,41 +160,86 @@ const writePendingMutations = async (mutations) => {
   await writeJsonValue(getPendingKey(), mutations);
 };
 
+// FIXED: previously this did an unsynchronized read -> push -> write on the
+// pending-mutations key. If a background sync (runPendingMutations) was
+// mid-flight at the same time, its own read-once/write-once cycle could
+// clobber this write and silently drop the mutation (e.g. an exercise's new
+// `order` value never reaching Firestore). Wrapping both functions in the
+// same per-user lock makes these operations mutually exclusive.
 const enqueuePendingMutation = async (mutation) => {
-  const pendingMutations = await readPendingMutations();
-  pendingMutations.push(mutation);
-  await writePendingMutations(pendingMutations);
+  const userId = getCurrentUserId();
+
+  return withPendingMutationsLock(userId, async () => {
+    const pendingMutations = await readPendingMutations();
+    pendingMutations.push(mutation);
+    await writePendingMutations(pendingMutations);
+
+    if (Object.prototype.hasOwnProperty.call(mutation.data ?? {}, 'order')) {
+      // console.log(
+      //   '[Order] Enqueued',
+      //   mutation.type,
+      //   mutation.collectionName,
+      //   mutation.recordId,
+      //   '-> order =',
+      //   mutation.data.order,
+      //   '| queue length =',
+      //   pendingMutations.length
+      // );
+    }
+  });
 };
 
+// FIXED: now runs fully inside the same lock as enqueuePendingMutation, so
+// new mutations queued by the UI while this is syncing to Firestore can
+// never be lost. Each successfully-synced mutation is removed and the
+// remaining list is only ever written back while still holding the lock.
 const runPendingMutations = async () => {
-  const pendingMutations = await readPendingMutations();
+  const userId = getCurrentUserId();
 
-  if (pendingMutations.length === 0) {
-    return;
-  }
+  return withPendingMutationsLock(userId, async () => {
+    const pendingMutations = await readPendingMutations();
 
-  const remainingMutations = [...pendingMutations];
-
-  while (remainingMutations.length > 0) {
-    const mutation = remainingMutations[0];
-    const recordRef = doc(getDb(), 'users', getCurrentUserId(), mutation.collectionName, mutation.recordId);
-
-    try {
-      if (mutation.type === 'set') {
-        await setDoc(recordRef, mutation.data);
-      } else if (mutation.type === 'update') {
-        await updateDoc(recordRef, mutation.data);
-      } else if (mutation.type === 'delete') {
-        await deleteDoc(recordRef);
-      }
-
-      remainingMutations.shift();
-    } catch (error) {
-      break;
+    if (pendingMutations.length === 0) {
+      return;
     }
-  }
 
-  await writePendingMutations(remainingMutations);
+    // console.log(
+    //   '[Order] Syncing pending mutations to Firestore:',
+    //   pendingMutations.map((m) => ({
+    //     id: m.recordId,
+    //     type: m.type,
+    //     order: m.data?.order,
+    //   }))
+    // );
+
+    const remainingMutations = [...pendingMutations];
+
+    while (remainingMutations.length > 0) {
+      const mutation = remainingMutations[0];
+      const recordRef = doc(getDb(), 'users', userId, mutation.collectionName, mutation.recordId);
+
+      try {
+        if (mutation.type === 'set') {
+          await setDoc(recordRef, mutation.data);
+        } else if (mutation.type === 'update') {
+          await updateDoc(recordRef, mutation.data);
+        } else if (mutation.type === 'delete') {
+          await deleteDoc(recordRef);
+        }
+
+        if (Object.prototype.hasOwnProperty.call(mutation.data ?? {}, 'order')) {
+          console.log('[Order] Synced', mutation.recordId, '-> order =', mutation.data.order);
+        }
+
+        remainingMutations.shift();
+      } catch (error) {
+        console.log('[Order] Failed to sync mutation, will retry later:', mutation.recordId, error?.message ?? error);
+        break;
+      }
+    }
+
+    await writePendingMutations(remainingMutations);
+  });
 };
 
 const triggerPendingMutationSync = () => {
@@ -169,6 +254,15 @@ const triggerPendingMutationSync = () => {
     });
 
   return pendingSyncPromise;
+};
+
+export const flushPendingMutations = async () => {
+  if (pendingSyncPromise) {
+    await pendingSyncPromise;
+    return;
+  }
+
+  await triggerPendingMutationSync();
 };
 
 const createLocalRecord = (payload) => ({
@@ -205,6 +299,8 @@ export const saveExerciseRecord = async (exercise) => {
   const recordId = doc(userCollection('exerciseRecords')).id;
   const recordRef = doc(getDb(), 'users', getCurrentUserId(), 'exerciseRecords', recordId);
   const nextRecord = createLocalRecord(exercise);
+
+  // console.log('[Order] Saving new exercise', recordId, exercise.name, '-> order =', exercise.order);
 
   await updateCachedRecords('exerciseRecords', (records) => [
     ...records,
@@ -299,6 +395,8 @@ export const updateExerciseRecord = async (recordId, exercise) => {
     createdAt: existingRecord?.createdAt,
     updatedAt: new Date().toISOString(),
   });
+
+  // console.log('[Order] updateExerciseRecord', recordId, exercise.name, '-> order =', exercise.order);
 
   await updateCachedRecords('exerciseRecords', (records) =>
     records.map((record) => (record.id === recordId ? { ...record, ...nextRecord } : record))
@@ -450,12 +548,12 @@ export const deletePrRecord = async (recordId) => {
 
 export const fetchUserRecords = async (collectionName, options = {}) => {
   if (options.forceRefresh) {
-    await triggerPendingMutationSync();
+    await flushPendingMutations();
   } else {
     triggerPendingMutationSync();
   }
 
-  const cachedRecords = sortRecords(await readCachedRecords(collectionName));
+  const cachedRecords = sortRecords(await readCachedRecords(collectionName), collectionName);
 
   if (cachedRecords.length > 0 && !options.forceRefresh) {
     return cachedRecords;
@@ -465,7 +563,14 @@ export const fetchUserRecords = async (collectionName, options = {}) => {
     const serverRecords = await getServerRecords(collectionName);
     await writeCachedRecords(collectionName, serverRecords);
 
-    return sortRecords(serverRecords);
+    if (collectionName === 'exerciseRecords') {
+      // console.log(
+      //   '[Order] Fetched from server:',
+      //   sortRecords(serverRecords, collectionName).map((r) => `${r.name}(day=${r.dayOfWeek}, order=${r.order})`)
+      // );
+    }
+
+    return sortRecords(serverRecords, collectionName);
   } catch (error) {
     return cachedRecords;
   }
@@ -474,5 +579,5 @@ export const fetchUserRecords = async (collectionName, options = {}) => {
 export const fetchLatestUserRecords = async (collectionName, recordLimit = 5, options = {}) => {
   const records = await fetchUserRecords(collectionName, options);
 
-  return sortRecords(records).slice(0, recordLimit);
+  return sortRecords(records, collectionName).slice(0, recordLimit);
 };

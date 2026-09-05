@@ -12,7 +12,7 @@ import { onAuthStateChanged } from 'firebase/auth';
 import { auth } from '../../../FireBase/firebase';
 import { fetchUserRecords } from '../../../FireBase/records';
 import { C } from '../Theme';
-import { BlurView } from '@react-native-community/blur';
+import BlurSurface from '../../../components/BlurSurface';
 
 const parseNumericValue = (value) => {
   const parsedValue = Number.parseFloat(value);
@@ -128,14 +128,11 @@ export default function GreetingSection({
 
       {/* Weight card — BlurView on iOS, solid fallback on Android */}
       {Platform.OS === 'ios' ? (
-        <BlurView
-          style={styles.card}
-          blurType="dark"
-          blurAmount={24}
-          reducedTransparencyFallbackColor="rgba(20,20,42,0.92)"
-        >
-          <CardContent />
-        </BlurView>
+        <BlurSurface style={styles.card} backgroundColor="rgba(20,20,42,0.72)">
+          <View style={styles.cardInner}>
+            <CardContent />
+          </View>
+        </BlurSurface>
       ) : (
         <View style={[styles.card, styles.cardAndroid]}>
           <CardContent />

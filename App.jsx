@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Linking, StyleSheet } from 'react-native'; // ← remove SafeAreaView
+import { ActivityIndicator, Alert, AppState, Linking, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
-import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context'; // ← ADD
+import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth } from './FireBase/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import BottomTabNavigator from './components/BottomNav';
@@ -14,6 +15,12 @@ import SignUpScreen from './screens/Auth/SignUpScreen';
 import Theme from './screens/Auth/Theme';
 import { fetchSharedSchedule, importExerciseRecords } from './FireBase/records';
 import { extractScheduleImportFromText } from './utils/scheduleShare';
+import {
+  APP_OPEN_LAST_NOTIFIED_KEY,
+  APP_OPEN_LAST_OPENED_KEY,
+  getLocalDateKey,
+  shouldSendDailyReminder,
+} from './utils/appOpenReminder';
 
 export default function App() {
   const [user, setUser] = useState(undefined);
@@ -27,6 +34,48 @@ export default function App() {
     });
     return unsubscribe;
   }, []);
+
+  const handleAppOpenReminder = useCallback(async () => {
+    if (!auth.currentUser) {
+      return;
+    }
+
+    const now = new Date();
+    const lastOpenedAt = await AsyncStorage.getItem(APP_OPEN_LAST_OPENED_KEY);
+    const lastNotifiedForDay = await AsyncStorage.getItem(APP_OPEN_LAST_NOTIFIED_KEY);
+
+    const shouldNotify = shouldSendDailyReminder({
+      lastOpenedAt,
+      now,
+      lastNotifiedForDay,
+    });
+
+    await AsyncStorage.setItem(APP_OPEN_LAST_OPENED_KEY, now.toISOString());
+
+    if (shouldNotify) {
+      Alert.alert(
+        'GymBro reminder',
+        'You have not opened the app yet today. Time to check your schedule and stay consistent.'
+      );
+      await AsyncStorage.setItem(APP_OPEN_LAST_NOTIFIED_KEY, getLocalDateKey(now));
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!user) {
+      return;
+    }
+
+    handleAppOpenReminder();
+
+    const appStateSubscription = AppState.addEventListener('change', (nextAppState) => {
+      if (nextAppState === 'active') {
+        handleAppOpenReminder();
+      }
+    });
+
+    return () => appStateSubscription?.remove?.();
+  }, [handleAppOpenReminder, user]);
 
   const importExercisesFromSchedule = useCallback(async (exercises, importKey) => {
     if (!Array.isArray(exercises) || exercises.length === 0) {

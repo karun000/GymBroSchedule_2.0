@@ -17,6 +17,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { doc, setDoc, collection } from 'firebase/firestore';
 
 import { C }    from './Theme';
@@ -61,6 +62,9 @@ const DAY_ALIASES = Object.entries(DAY_NAMES).reduce((acc, [id, label]) => {
   return acc;
 }, {});
 
+const STORED_WEEK_KEY = '@plan_active_week';
+const STORED_WEEK_DATE_KEY = '@plan_week_calendar_date';
+
 const normalizeDayId = (dayOfWeek) => {
   if (!dayOfWeek) {
     return 'MON';
@@ -85,6 +89,14 @@ const normalizeWeekNumber = (weekValue) => {
 
 const getTodayDayId = () => DAY_IDS[new Date().getDay()] || 'MON';
 
+const getCalendarWeekTag = () => {
+  const now = new Date();
+  const sunday = new Date(now);
+  sunday.setDate(now.getDate() - now.getDay());
+  sunday.setHours(0, 0, 0, 0);
+  return sunday.toDateString();
+};
+
 const getExerciseTime = (exercise) => {
   const sourceValue = exercise?.createdAt ?? exercise?.updatedAt ?? 0;
 
@@ -108,15 +120,19 @@ const getExerciseTime = (exercise) => {
 const getExerciseOrder = (exercise) => {
   const parsedOrder = Number(exercise?.order);
 
-  return Number.isFinite(parsedOrder) ? parsedOrder : null;
+  return Number.isFinite(parsedOrder) ? Math.trunc(parsedOrder) : null;
 };
 
 const sortExercisesByOrder = (left, right) => {
   const leftOrder = getExerciseOrder(left);
   const rightOrder = getExerciseOrder(right);
 
-  if (leftOrder !== null && rightOrder !== null && leftOrder !== rightOrder) {
-    return leftOrder - rightOrder;
+  if (leftOrder !== null && rightOrder !== null) {
+    if (leftOrder !== rightOrder) {
+      return leftOrder - rightOrder;
+    }
+  } else if (leftOrder !== null || rightOrder !== null) {
+    return leftOrder === null ? 1 : -1;
   }
 
   return getExerciseTime(left) - getExerciseTime(right);
@@ -229,31 +245,33 @@ export default function ScheduleScreen() {
     }
   }, [loadSchedule]);
 
-  useEffect(() => {
-    loadSchedule();
-  }, [loadSchedule]);
-
+  // Sync default week from HomeScreen's AsyncStorage on focus
   useFocusEffect(
     useCallback(() => {
+      const loadInitialWeek = async () => {
+        try {
+          const storedWeek = await AsyncStorage.getItem(STORED_WEEK_KEY);
+          if (storedWeek) {
+            setActiveWeek(storedWeek);
+          } else {
+            // Initialize if it doesn't exist to match HomeScreen behavior
+            await AsyncStorage.setItem(STORED_WEEK_KEY, 'W1');
+            await AsyncStorage.setItem(STORED_WEEK_DATE_KEY, getCalendarWeekTag());
+          }
+        } catch (e) {
+          console.log('Failed to sync active week:', e);
+        }
+      };
+      
+      loadInitialWeek();
       loadSchedule();
     }, [loadSchedule])
   );
 
+  // Expand the day card corresponding to today whenever the active week changes
   useEffect(() => {
-    const currentWeekDays = weekCards[activeWeek] || [];
-    const todayDay = getTodayDayId();
-    const todayHasExercises = currentWeekDays.find((day) => day.id === todayDay)?.exercises?.length > 0;
-    const firstAvailableDay = currentWeekDays.find((day) => day?.exercises?.length > 0)?.id;
-
-    if (todayHasExercises) {
-      setExpandedId(todayDay);
-      return;
-    }
-
-    if (firstAvailableDay) {
-      setExpandedId(firstAvailableDay);
-    }
-  }, [activeWeek, weekCards]);
+    setExpandedId(getTodayDayId());
+  }, [activeWeek]);
 
   // ── Handlers ──────────────────────────────────────────────────────────────
   const handleToggle = (id) => {
@@ -264,7 +282,17 @@ export default function ScheduleScreen() {
     console.log('ScheduleScreen: menu pressed — opening drawer');
     setIsDrawerVisible(true);
   };
-  const handleWeekPress = (id) => setActiveWeek(id);
+
+  const handleWeekPress = async (id) => {
+    setActiveWeek(id);
+    // Persist to AsyncStorage to sync with HomeScreen
+    try {
+      await AsyncStorage.setItem(STORED_WEEK_KEY, id);
+      await AsyncStorage.setItem(STORED_WEEK_DATE_KEY, getCalendarWeekTag());
+    } catch (e) {
+      console.log('Failed to persist week change:', e);
+    }
+  };
 
   const closeImportModal = () => {
     if (isImporting) {
