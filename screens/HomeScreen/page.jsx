@@ -14,6 +14,7 @@ import { navigationRef } from '../../navigationRef';
 
 import NavHeader        from '../../components/NavHeader';
 import GreetingSection  from './components/GreetingSection';
+import AISummaryCard    from './components/AiSummaryCard';
 import DayCard          from '../ScheduleScreen/components/Daycard';
 import DaySelector      from '../ScheduleScreen/components/Dayselector';
 import WeekSelector     from '../ScheduleScreen/components/Weekselector';
@@ -267,11 +268,20 @@ export default function HomeScreen() {
   const [weights,      setWeights]      = useState([]);
   const [refreshing,   setRefreshing]   = useState(false);
 
+  // Bumped on every pull-to-refresh so AISummaryCard knows to bypass its
+  // server-side cache and regenerate instead of just re-reading the cache.
+  const [summaryRefreshTrigger, setSummaryRefreshTrigger] = useState(0);
+
   // Derived from state – used for rendering only.
   const visibleWeekOptions = useMemo(() => getVisibleWeeks(weekCards), [weekCards]);
   const visibleWeekKey     = useMemo(
     () => visibleWeekOptions.map((w) => w.id).join(','),
     [visibleWeekOptions]
+  );
+
+  const todayExerciseCount = useMemo(
+    () => (weekCards[selectedWeek] || {})[selectedDay]?.exercises?.length ?? 0,
+    [weekCards, selectedWeek, selectedDay]
   );
 
   // ── Data loader (shared between the mount effect and useFocusEffect) ──────
@@ -310,6 +320,8 @@ export default function HomeScreen() {
 
     try {
       await loadHomeData(isActiveRef, true);
+      // Force the AI summary to regenerate against the freshly-pulled data.
+      setSummaryRefreshTrigger((prev) => prev + 1);
     } finally {
       setRefreshing(false);
     }
@@ -369,6 +381,9 @@ export default function HomeScreen() {
   };
   const handleAddExercise = () => console.log('Add exercise');
   const handleWeightRow   = (item) => console.log('Weight row pressed:', item.title);
+  const handleViewInsights = () => {
+    if (navigationRef.isReady()) navigationRef.navigate('PR');
+  };
 
   // ── Render ────────────────────────────────────────────────────────────────
   return (
@@ -402,6 +417,13 @@ export default function HomeScreen() {
         <GreetingSection
           name="Alex"
           subtitle="Stay consistent and crush your goals."
+        />
+
+        {/* ③.5 AI Summary */}
+        <AISummaryCard
+          todayExerciseCount={todayExerciseCount}
+          refreshTrigger={summaryRefreshTrigger}
+          onViewInsights={handleViewInsights}
         />
 
         {/* ④ Week + day workout */}

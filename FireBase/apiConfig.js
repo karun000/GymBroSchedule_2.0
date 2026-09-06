@@ -1,0 +1,3 @@
+export const GEMINI_API_KEY = 'AQ.Ab8RN6JLHJqBze0A96QTZnVnGwTAfiKve7xZfW8bVQd2iLLaTg';
+
+export const NVIDIA_NIM_API_KEY = 'p4mBlYL6cirWpef_QCsMItWbAThqzmezkFhaiURDYJchv7qPqLxMm0mHSWUpAorZ';
