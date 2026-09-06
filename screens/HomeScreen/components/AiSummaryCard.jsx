@@ -325,15 +325,13 @@ export default AiSummaryCard;
 
 const styles = StyleSheet.create({
   // Card shell — matches SavedWeightsCard.card
-  card: {
+   card: {
     backgroundColor: C.card,
     borderRadius: 20,
     paddingHorizontal: 14,
     paddingTop: 16,
-    paddingBottom: 10,
-    marginHorizontal: 16,
-    marginTop: 12,
-    marginBottom: 8,
+    paddingBottom: 4,
+    marginBottom: 24,
   },
 
   // Header — matches SavedWeightsCard.cardHeader / headerLeft

@@ -83,12 +83,13 @@ export default function DayCard({
 }
 
 const styles = StyleSheet.create({
-  card: {
+ card: {
     backgroundColor: C.card,
-    borderRadius: 16,
-    marginBottom: 10,
-    overflow: 'hidden',
-    marginHorizontal: 10,
+    borderRadius: 20,
+    // paddingHorizontal: 14,
+    paddingTop: 16,
+    paddingBottom: 4,
+    marginBottom: 24,
   },
 
   // Header row
