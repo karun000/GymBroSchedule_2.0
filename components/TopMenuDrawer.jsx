@@ -14,6 +14,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { onAuthStateChanged, signOut } from 'firebase/auth';
 import { auth } from '../FireBase/firebase';
 import { ThemeContext } from '../context/ThemeContext';
+import { navigationRef } from '../navigationRef';
 
 export default function TopMenuDrawer({ visible, onClose }) {
   const { theme, mode } = useContext(ThemeContext);
@@ -98,6 +99,23 @@ export default function TopMenuDrawer({ visible, onClose }) {
                   </View>
                 </View> 
               */}
+
+              <TouchableOpacity
+                style={[styles.actionRow, { backgroundColor: COLORS.card, borderColor: COLORS.border }]}
+                activeOpacity={0.85}
+                onPress={() => {
+                  onClose?.();
+                  if (navigationRef.isReady()) {
+                    navigationRef.navigate('Subscription');
+                  }
+                }}
+              >
+                <View style={styles.actionIconWrap}>
+                  <Icon name="credit-card" size={18} color={COLORS.white} />
+                </View>
+                <Text style={[styles.actionLabel, { color: COLORS.white }]}>Subscription</Text>
+                <Icon name="chevron-right" size={20} color={COLORS.gray} />
+              </TouchableOpacity>
 
               <TouchableOpacity
                 style={[styles.actionRow, styles.logoutRow, { backgroundColor: COLORS.card, borderColor: COLORS.border }]}
