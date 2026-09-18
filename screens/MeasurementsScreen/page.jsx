@@ -17,6 +17,7 @@ import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
 import Theme from './Theme';
 import NavHeader from '../../components/NavHeader';
 import ProgressLineChart from '../../components/ProgressLineChart';
+import { useFitnessGoal } from '../../context/FitnessGoalContext';
 import DateSelector from './components/DateSelector';
 import AddMeasurementForm from './components/AddMeasurementForm';
 import { fetchUserRecords } from '../../FireBase/records';
@@ -90,6 +91,7 @@ const convertWeightValue = (value, fromUnit, toUnit) => {
 
 const MeasurementsScreenPage = ({ navigation, route }) => {
   const tabBarHeight = useBottomTabBarHeight();
+  const { goal } = useFitnessGoal();
   const [measurementHistory, setMeasurementHistory] = useState([]);
   const [expandedRecordId, setExpandedRecordId] = useState(null);
   const [isFormVisible, setIsFormVisible] = useState(false);
@@ -284,6 +286,8 @@ const MeasurementsScreenPage = ({ navigation, route }) => {
         )}
       >
         <ProgressLineChart
+          goal={goal}
+          metric="weight"
           theme={Theme}
           title="WEIGHT PROGRESS"
           subtitle="Body weight trend from saved measurements"

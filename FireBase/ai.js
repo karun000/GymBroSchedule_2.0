@@ -1,101 +1,24 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { fetchUserRecords } from './records';
+import { auth } from './firebase';
+import { createSummaryCache } from '../utils/aiSummaryCache';
+
+const getCachedSummary = createSummaryCache(AsyncStorage);
 
 // -----------------------------------------------------------------------------
 // API KEYS
 // -----------------------------------------------------------------------------
 // IMPORTANT: These keys have been exposed in source code/chat.
 // Revoke them and create new keys before using this in a real app.
-const GEMINI_API_KEY = 'AQ.Ab8RN6JLHJqBze0A96QTZnVnGwTAfiKve7xZfW8bVQd2iLLaTg';
-const NVIDIA_NIM_API_KEY = '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';
-
-// -----------------------------------------------------------------------------
-// REQUEST TIMEOUT
-// -----------------------------------------------------------------------------
-// React Native's fetch has no built-in timeout — a dropped/stalled connection
-// (DNS issue, firewall, flaky network) can otherwise hang far longer than a
-// user will wait, or surface as a late, unclear "Network request failed".
-// Wrapping fetch in an AbortController gives us a bounded, clearly-labeled
-// failure instead.
-// -----------------------------------------------------------------------------
-
-const REQUEST_TIMEOUT_MS = 15000;
-
-const fetchWithTimeout = async (url, options = {}, timeoutMs = REQUEST_TIMEOUT_MS) => {
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), timeoutMs);
-
-  try {
-    return await fetch(url, { ...options, signal: controller.signal });
-  } catch (err) {
-    if (err?.name === 'AbortError') {
-      throw new Error(`Request timed out after ${timeoutMs}ms.`);
-    }
-    throw err;
-  } finally {
-    clearTimeout(timeoutId);
-  }
-};
-
-// -----------------------------------------------------------------------------
-// AI RESULT CACHE
-// -----------------------------------------------------------------------------
-// Gemini's free tier is quota-limited (20 requests/day on this key). Calling
-// it fresh on every mount/refresh burns through that fast. We cache the last
-// successful AI result together with a fingerprint of the underlying data —
-// if the user's weight/PR data hasn't changed since the cached result was
-// generated, we reuse it instead of calling the AI providers again.
-// A forced refresh (forceRefresh: true) always bypasses the cache.
-// -----------------------------------------------------------------------------
-
-const AI_SUMMARY_CACHE_KEY = '@gymbro_ai_summary_cache';
-
-const buildResultFingerprint = ({ goal, latestWeight, weightChange, prProgress }) =>
-  [
-    goal,
-    latestWeight?.value ?? '',
-    latestWeight?.dateLabel ?? '',
-    weightChange ?? '',
-    prProgress?.exerciseName ?? '',
-    prProgress?.currentValue ?? '',
-  ].join('|');
-
-const readCachedSummary = async (fingerprint) => {
-  try {
-    const raw = await AsyncStorage.getItem(AI_SUMMARY_CACHE_KEY);
-    if (!raw) return null;
-
-    const parsed = JSON.parse(raw);
-    if (parsed?.fingerprint === fingerprint && parsed?.result) {
-      return parsed.result;
-    }
-  } catch (err) {
-    console.warn('[AI Summary] Failed to read cache:', err);
-  }
-  return null;
-};
-
-const writeCachedSummary = async (fingerprint, result) => {
-  try {
-    await AsyncStorage.setItem(
-      AI_SUMMARY_CACHE_KEY,
-      JSON.stringify({ fingerprint, result })
-    );
-  } catch (err) {
-    console.warn('[AI Summary] Failed to write cache:', err);
-  }
-};
+const NVIDIA_NIM_API_KEY = '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';
 
 // -----------------------------------------------------------------------------
 // MODELS
 // -----------------------------------------------------------------------------
 
-// Use a currently supported Gemini model.
-const GEMINI_MODEL = 'gemini-3.6-flash';
-const GEMINI_URL =
-  `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
-
-const NVIDIA_MODEL = 'nvidia/nemotron-3.5-lightning-30b-a3b';
+// FIXED: was 'nvidia/nemotron-3.5-lightning-30b-a3b' (timing out).
+// Switched to z-ai/glm-5.3-flash which is fast and matches the NVIDIA example.
+const NVIDIA_MODEL = 'z-ai/glm-5.3-flash';
 const NVIDIA_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
 
 // -----------------------------------------------------------------------------
@@ -676,68 +599,12 @@ const parseAIJson = (rawText) => {
 };
 
 // -----------------------------------------------------------------------------
-// GEMINI
+// NVIDIA NIM  —  z-ai/glm-5.3-flash
 // -----------------------------------------------------------------------------
-
-const generateGeminiSummary = async (payload) => {
-  if (!GEMINI_API_KEY) {
-    throw new Error('Gemini API key is missing.');
-  }
-
-  const prompt = buildAIPrompt(payload);
-
-  const response = await fetchWithTimeout(
-    `${GEMINI_URL}?key=${encodeURIComponent(GEMINI_API_KEY)}`,
-    {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        contents: [
-          {
-            role: 'user',
-            parts: [{ text: prompt }],
-          },
-        ],
-        generationConfig: {
-          temperature: 0.2,
-          responseMimeType: 'application/json',
-        },
-      }),
-    }
-  );
-
-  if (!response.ok) {
-    const errorText = await response.text();
-
-    throw new Error(
-      `Gemini request failed (${response.status}): ${errorText}`
-    );
-  }
-
-  const data = await response.json();
-
-  const text =
-    data?.candidates?.[0]?.content?.parts
-      ?.map((part) => part?.text ?? '')
-      .join('')
-      .trim() || '';
-
-  if (!text) {
-    throw new Error('Gemini returned an empty response.');
-  }
-
-  const result = parseAIJson(text);
-
-  return {
-    ...result,
-    provider: 'gemini',
-  };
-};
-
-// -----------------------------------------------------------------------------
-// NVIDIA NIM
+// FIXED: Switched model from nemotron-3.5 (slow, timing out) to glm-5.3-flash.
+// System message is now a real assistant description instead of the
+// Nemotron-specific "detailed thinking off" toggle.
+// temperature/top_p/max_tokens aligned with the official NVIDIA example.
 // -----------------------------------------------------------------------------
 
 const generateNvidiaNimSummary = async (payload) => {
@@ -751,14 +618,9 @@ const generateNvidiaNimSummary = async (payload) => {
     model: NVIDIA_MODEL,
 
     messages: [
-      // Nemotron reasoning models support this "detailed thinking" toggle
-      // via a system message. Turning it off skips the long chain-of-thought
-      // section entirely, so the response is just the JSON we asked for.
-      // If this model build ignores the toggle, the increased max_tokens
-      // below + the smarter parser still protect us.
       {
         role: 'system',
-        content: 'detailed thinking off',
+        content: 'You are a fitness progress assistant inside a gym tracking app.',
       },
       {
         role: 'user',
@@ -766,18 +628,15 @@ const generateNvidiaNimSummary = async (payload) => {
       },
     ],
 
-    temperature: 0.2,
-    top_p: 0.95,
-    // Reasoning models spend a large chunk of the token budget on
-    // chain-of-thought before emitting the final JSON. 600 was cutting the
-    // response off before it ever reached the answer, which caused the
-    // parser to fall back to the placeholder example embedded in the prompt.
-    max_tokens: 2048,
-
+    temperature: 0.5,
+    top_p: 1,
+    max_tokens: 1024,
     stream: false,
   };
 
-  const response = await fetchWithTimeout(NVIDIA_URL, {
+  // Do not abort NVIDIA requests from the client. NVIDIA may take longer than
+  // the fallback provider, and the caller should wait for the complete result.
+  const response = await fetch(NVIDIA_URL, {
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -827,6 +686,8 @@ export const generateFitnessSummary = async ({
   goal = 'maintain',
   forceRefresh = false,
 } = {}) => {
+  const userId = auth.currentUser?.uid;
+  if (!userId) throw new Error('Sign in to view your summary.');
   try {
     // -------------------------------------------------------------------------
     // Fetch actual records
@@ -1014,75 +875,21 @@ export const generateFitnessSummary = async ({
     // CHECK CACHE (skips both AI calls entirely when data hasn't changed)
     // -------------------------------------------------------------------------
 
-    const fingerprint = buildResultFingerprint(aiPayload);
-
-    let aiResult = null;
-    let isFreshAiResult = false;
-
-    if (!forceRefresh) {
-      const cached = await readCachedSummary(fingerprint);
-      if (cached) {
-        console.log('[AI Summary] Using cached AI result — data unchanged.');
-        aiResult = cached;
-      }
-    }
-
-    // -------------------------------------------------------------------------
-    // RUN GEMINI + NVIDIA SIMULTANEOUSLY (only if no usable cache hit)
-    // -------------------------------------------------------------------------
-
-    if (!aiResult) {
-      try {
-        console.log(
-          '[AI Summary] Firing Gemini + NVIDIA simultaneously...'
-        );
-
-        aiResult = await Promise.any([
-          generateGeminiSummary(aiPayload),
-          generateNvidiaNimSummary(aiPayload),
-        ]);
-
-        console.log(
-          `[AI Summary] Provider succeeded: ${aiResult.provider}`
-        );
-        isFreshAiResult = true;
-      } catch (aggregateError) {
-        console.warn(
-          '[AI Summary] Both AI providers failed.'
-        );
-
-        console.warn(
-          '[AI Summary] Gemini/NVIDIA errors:',
-          aggregateError?.errors
-        );
-
-        // IMPORTANT:
-        // Do NOT show a useless generic message.
-        // Use factual locally-generated data instead.
-        aiResult = localFallback;
-      }
-    }
-
-    // -------------------------------------------------------------------------
-    // VALIDATE AI RESULT
-    // -------------------------------------------------------------------------
-
-    if (
-      !aiResult?.progressSummary ||
-      typeof aiResult.progressSummary !== 'string' ||
-      isPlaceholderResult(aiResult)
-    ) {
-      console.warn(
-        '[AI Summary] Invalid or placeholder AI summary. Using local fallback.'
-      );
-
+    let aiResult;
+    try {
+      aiResult = await getCachedSummary(userId, {
+        prs: prRecords,
+        measurements: measurementRecords,
+      }, async () => {
+        const result = await generateNvidiaNimSummary(aiPayload);
+        if (!isValidSummaryShape(result) || isPlaceholderResult(result)) {
+          throw new Error('NVIDIA returned an invalid summary.');
+        }
+        return result;
+      });
+    } catch (error) {
+      console.warn('[AI Summary] NVIDIA summary unavailable:', error?.name || 'Error');
       aiResult = localFallback;
-    } else if (isFreshAiResult) {
-      // Only cache genuine, validated, freshly-fetched AI provider results —
-      // never the local fallback, never a placeholder, and never a result
-      // that just came from the cache itself — so a future call keeps
-      // retrying the AI providers instead of getting stuck on a bad summary.
-      writeCachedSummary(fingerprint, aiResult);
     }
 
     const insights =

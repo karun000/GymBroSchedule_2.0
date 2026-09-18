@@ -38,7 +38,7 @@ function WeightRow({ item, last, onPress }) {
         <Text style={styles.weight}>{item.weight}</Text>
       </View>
 
-      <Icon name="chevron-right" size={20} color={C.gray} style={{ marginLeft: 6 }} />
+      <Icon name="chevron-right" size={20} color={C.gray} style={styles.rowChevron} />
     </TouchableOpacity>
   );
 }
@@ -59,7 +59,7 @@ export default function SavedWeightsCard({
           <View style={styles.cardIconBubble}>
             <Icon name="bullseye-arrow" size={20} color={C.purple} />
           </View>
-          <View style={{ marginLeft: 10 }}>
+          <View style={styles.headerTextWrap}>
             <Text style={styles.cardTitle}>PR</Text>
             <Text style={styles.cardDesc}>Your latest used weights.</Text>
           </View>
@@ -67,7 +67,7 @@ export default function SavedWeightsCard({
 
         <TouchableOpacity style={styles.pill} onPress={onViewAll} activeOpacity={0.75}>
           <Text style={styles.pillText}>View All</Text>
-          <Icon name="chevron-right" size={15} color={C.purple} style={{ marginLeft: 3 }} />
+          <Icon name="chevron-right" size={15} color={C.purple} style={styles.pillIcon} />
         </TouchableOpacity>
       </View>
 
@@ -106,6 +106,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   headerLeft:   { flexDirection: 'row', alignItems: 'center' },
+  headerTextWrap: { marginLeft: 10 },
   cardTitle:    { fontSize: 16, fontWeight: '700', color: C.white },
   cardDesc:     { fontSize: 12, color: C.gray, marginTop: 2 },
 
@@ -128,6 +129,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   pillText: { color: C.purple, fontSize: 13, fontWeight: '600' },
+  pillIcon: { marginLeft: 3 },
 
   // WeightRow
   row: {
@@ -154,6 +156,7 @@ const styles = StyleSheet.create({
   meta:   { alignItems: 'flex-end' },
   sets:   { fontSize: 13, fontWeight: '700' },
   weight: { fontSize: 12, color: C.gray, marginTop: 2 },
+  rowChevron: { marginLeft: 6 },
 
   // Footer
   footer: {

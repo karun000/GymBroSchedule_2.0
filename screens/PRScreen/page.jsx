@@ -19,11 +19,14 @@ import PRHistoryItem from './components/PRHistoryItem';
 import PREditorModal from './components/PREditorModal';
 import NavHeader from '../../components/NavHeader';
 import ProgressLineChart from '../../components/ProgressLineChart';
+import { useFitnessGoal } from '../../context/FitnessGoalContext';
 import { deletePrRecord, fetchUserRecords, savePrRecord, updatePrRecord } from '../../FireBase/records';
 
 const PRScreenPage = ({ navigation, route }) => {
   const tabBarHeight = useBottomTabBarHeight();
+  const { goal } = useFitnessGoal();
   const [prHistory, setPrHistory] = useState([]);
+  const [selectedSeries, setSelectedSeries] = useState(null);
   const [editingPr, setEditingPr] = useState(null);
   const [isFormVisible, setIsFormVisible] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -152,11 +155,18 @@ const PRScreenPage = ({ navigation, route }) => {
     return value;
   };
 
+  const seriesKey = record => `${(record.name ?? 'Exercise').trim().toLowerCase()}|${record.repMax ?? 1}`;
+  const seriesOptions = [...new Map(prHistory.map(record => [seriesKey(record), {
+    key: seriesKey(record), label: `${record.name} · ${record.repMax ?? 1} reps`,
+  }])).values()];
+  const activeSeries = seriesOptions.find(item => item.key === selectedSeries) ?? seriesOptions[0];
+  const comparableRecords = prHistory.filter(record => seriesKey(record) === activeSeries?.key);
+
   const prTrendData = (() => {
-    const latestPrRecord = prHistory.find((record) => parseNumericValue(record.weight) !== null);
+    const latestPrRecord = comparableRecords.find((record) => parseNumericValue(record.weight) !== null);
     const targetUnit = latestPrRecord?.unit ?? 'kg';
 
-    return prHistory
+    return comparableRecords
       .slice()
       .sort((left, right) => {
         const leftTime = left.dateISO ? new Date(left.dateISO).getTime() : 0;
@@ -211,13 +221,24 @@ const PRScreenPage = ({ navigation, route }) => {
           />
         )}
       >
+        {seriesOptions.length > 0 && (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.seriesOptions}>
+            {seriesOptions.map(item => (
+              <TouchableOpacity key={item.key} accessibilityRole="radio" accessibilityState={{ selected: item.key === activeSeries?.key }} onPress={() => setSelectedSeries(item.key)} style={[styles.seriesOption, item.key === activeSeries?.key && styles.seriesSelected]}>
+                <Text style={styles.seriesText}>{item.label}</Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
         <ProgressLineChart
+          goal={goal}
+          metric="strength"
           theme={Theme}
           title="PR PROGRESS"
-          subtitle="Weight trend across your saved PR entries"
+          subtitle={activeSeries ? `${activeSeries.label} · comparable lifts` : 'Strength trend for the same lift and rep count'}
           data={prTrendData}
           emptyTitle="Add a couple of PRs"
-          emptyText="Save at least two PR entries to see the line graph update over time."
+          emptyText="Save at least two entries for this lift and rep count to compare strength."
           valueFormatter={(value, unit) => `${Number.isInteger(value) ? value : value.toFixed(1)} ${unit}`}
         />
 
@@ -274,6 +295,10 @@ const PRScreenPage = ({ navigation, route }) => {
 };
 
 const styles = StyleSheet.create({
+  seriesOptions: { paddingHorizontal: 16, gap: 8, paddingBottom: 12 },
+  seriesOption: { padding: 10, borderRadius: 12, borderWidth: 1, borderColor: Theme.colors.primary },
+  seriesSelected: { backgroundColor: Theme.colors.primary },
+  seriesText: { color: Theme.colors.text },
   safe: {
     flex: 1,
     backgroundColor: Theme.colors.background,

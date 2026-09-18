@@ -155,7 +155,7 @@ const AddExercisePage = () => {
     // );
 
     return sorted;
-  }, [selectedDay, selectedWeek, weekExercises]);
+  }, [selectedDay, weekExercises]);
   const weekExercisesRef = useRef(weekExercises);
   const latestOrderedExercisesRef = useRef(exercises);
 

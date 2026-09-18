@@ -209,7 +209,7 @@ const NewPRForm = ({ onLog }) => {
           <ActivityIndicator color="#fff" />
         ) : (
           <>
-            <Icon name="plus-circle-outline" size={18} color="#fff" style={{ marginRight: 8 }} />
+            <Icon name="plus-circle-outline" size={18} color="#fff" style={styles.btnIcon} />
             <Text style={styles.logBtnText}>LOG NEW PR</Text>
           </>
         )}
@@ -420,6 +420,9 @@ const styles = StyleSheet.create({
     fontSize: Theme.font.sm,
     fontWeight: '700',
     letterSpacing: 0.8,
+  },
+  btnIcon: {
+    marginRight: 8,
   },
   dateBackdrop: {
     flex: 1,

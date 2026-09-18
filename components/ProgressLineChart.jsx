@@ -1,6 +1,7 @@
 import React, { useMemo, useState } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { getGoalTitle, getGoalTrend } from '../utils/fitnessGoal';
 
 const DEFAULT_EMPTY_TITLE = 'Not enough data yet';
 const DEFAULT_EMPTY_TEXT = 'Add at least two entries to see a progress line.';
@@ -35,13 +36,15 @@ const formatDelta = (deltaValue, unit) => {
 
 const ProgressLineChart = ({
   theme,
+  goal,
+  metric = 'weight',
   title,
   subtitle,
   data = [],
   emptyTitle = DEFAULT_EMPTY_TITLE,
   emptyText = DEFAULT_EMPTY_TEXT,
   valueFormatter = formatValueLabel,
-  accentColor = theme?.colors?.primary ?? '#7C3AED',
+  accentColor: defaultAccentColor = theme?.colors?.primary ?? '#7C3AED',
 }) => {
   const [chartWidth, setChartWidth] = useState(0);
 
@@ -102,14 +105,17 @@ const ProgressLineChart = ({
     };
   }, [chartPoints, hasTrend]);
 
+  const goalTrend = getGoalTrend({ goal, metric, delta: summary?.delta, hasComparison: hasTrend });
+  const accentColor = goal ? goalTrend.color : defaultAccentColor;
+
   if (!hasTrend) {
     return (
       <View style={[styles.card, { borderColor: theme?.colors?.cardBorder ?? '#252240' }]}>
         <View style={styles.headerRow}>
-          <View>
+          <View style={styles.headerText}>
             <Text style={[styles.title, { color: theme?.colors?.text ?? '#FFFFFF' }]}>{title}</Text>
             <Text style={[styles.subtitle, { color: theme?.colors?.textSub ?? '#9B99B5' }]}>
-              {subtitle}
+              {subtitle}{goal ? ` · ${getGoalTitle(goal)}` : ''}
             </Text>
           </View>
 
@@ -132,10 +138,10 @@ const ProgressLineChart = ({
   return (
     <View style={[styles.card, { borderColor: theme?.colors?.cardBorder ?? '#252240' }]}>
       <View style={styles.headerRow}>
-        <View>
+        <View style={styles.headerText}>
           <Text style={[styles.title, { color: theme?.colors?.text ?? '#FFFFFF' }]}>{title}</Text>
           <Text style={[styles.subtitle, { color: theme?.colors?.textSub ?? '#9B99B5' }]}>
-            {subtitle}
+            {subtitle}{goal ? ` · ${getGoalTitle(goal)}` : ''}
           </Text>
         </View>
 
@@ -144,6 +150,7 @@ const ProgressLineChart = ({
         </View>
       </View>
 
+      <Text style={[styles.goalLabel, { color: goalTrend.color }]}>{goalTrend.label}</Text>
       <View style={styles.summaryRow}>
         <View style={[styles.summaryPill, { backgroundColor: theme?.colors?.background ?? '#0D0B1E', borderColor: theme?.colors?.cardBorder ?? '#252240' }]}>
           <Text style={[styles.summaryLabel, { color: theme?.colors?.textMuted ?? '#5A5878' }]}>START</Text>
@@ -248,12 +255,14 @@ const styles = StyleSheet.create({
     padding: 16,
     gap: 14,
   },
+  headerText: { flex: 1 },
   headerRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: 12,
   },
+  goalLabel: { fontSize: 12, lineHeight: 18 },
   title: {
     fontSize: 14,
     fontWeight: '700',

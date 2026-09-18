@@ -128,7 +128,7 @@ const CreateExerciseForm = ({ selectedWeek, selectedDay, onDayChange, onAdd }) =
         <View style={styles.colEquipment}>
           <Text style={styles.label}>Equipment</Text>
           <TouchableOpacity style={styles.dropdown} onPress={() => setEquipOpen(true)} activeOpacity={0.8}>
-            <Text style={[styles.dropdownText, { flex: 1 }]} numberOfLines={1}>{equipment}</Text>
+            <Text style={[styles.dropdownText, styles.dropdownTextFlex]} numberOfLines={1}>{equipment}</Text>
             <Icon name="chevron-down" size={16} color={Theme.colors.textSub} />
           </TouchableOpacity>
         </View>
@@ -168,7 +168,7 @@ const CreateExerciseForm = ({ selectedWeek, selectedDay, onDayChange, onAdd }) =
           <ActivityIndicator color="#fff" />
         ) : (
           <>
-            <Icon name="plus-circle-outline" size={18} color="#fff" style={{ marginRight: 8 }} />
+            <Icon name="plus-circle-outline" size={18} color="#fff" style={styles.btnIcon} />
             <Text style={styles.addBtnText}>ADD EXERCISE TO WEEK {selectedWeek}</Text>
           </>
         )}
@@ -236,6 +236,9 @@ const styles = StyleSheet.create({
   dropdownText: {
     color: Theme.colors.text,
     fontSize: Theme.font.base,
+  },
+  dropdownTextFlex: {
+    flex: 1,
   },
   twoCol: {
     flexDirection: 'row',
@@ -309,6 +312,9 @@ const styles = StyleSheet.create({
     fontSize: Theme.font.sm,
     fontWeight: '700',
     letterSpacing: 0.8,
+  },
+  btnIcon: {
+    marginRight: 8,
   },
 });
 

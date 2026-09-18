@@ -165,7 +165,7 @@ const AddMeasurementForm = ({ selectedDateLabel, onSave, initialMeasurements }) 
           <ActivityIndicator color="#fff" />
         ) : (
           <>
-            <Icon name="plus-circle-outline" size={18} color="#fff" style={{ marginRight: 8 }} />
+            <Icon name="plus-circle-outline" size={18} color="#fff" style={styles.btnIcon} />
             <Text style={styles.saveBtnText}>SAVE MEASUREMENTS TO {selectedDateLabel}</Text>
           </>
         )}
@@ -262,6 +262,9 @@ const styles = StyleSheet.create({
     fontSize: Theme.font.sm,
     fontWeight: '700',
     letterSpacing: 0.8,
+  },
+  btnIcon: {
+    marginRight: 8,
   },
 });
 

@@ -16,7 +16,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useBottomTabBarHeight } from '@react-navigation/bottom-tabs';
-import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { doc, setDoc, collection } from 'firebase/firestore';
 
@@ -24,7 +24,6 @@ import { C }    from './Theme';
 import { auth, getDb } from '../../FireBase/firebase';
 
 import NavHeader     from '../../components/NavHeader';
-import TopMenuDrawer from '../../components/TopMenuDrawer';
 import WeekSelector  from './components/Weekselector';
 import DayCard       from './components/Daycard';
 import ExerciseEditorModal from '../AddScreen/components/ExerciseEditorModal';
@@ -194,14 +193,12 @@ const buildWeekCards = (records) => {
 
 export default function ScheduleScreen() {
   const tabBarHeight = useBottomTabBarHeight();
-  const navigation = useNavigation();
 
   // ── State ─────────────────────────────────────────────────────────────────
   const [expandedId, setExpandedId] = useState(getTodayDayId());
   const [activeWeek, setActiveWeek] = useState('W1');
   const [weekCards, setWeekCards] = useState({ W1: [], W2: [], W3: [], W4: [], W5: [] });
   const [editingExercise, setEditingExercise] = useState(null);
-  const [isDrawerVisible, setIsDrawerVisible] = useState(false);
   const [allExerciseRecords, setAllExerciseRecords] = useState([]);
   const [isSharing, setIsSharing] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
@@ -278,11 +275,6 @@ export default function ScheduleScreen() {
     setExpandedId((prev) => (prev === id ? null : id));
   };
 
-  const debugHandleMenuPress = () => {
-    console.log('ScheduleScreen: menu pressed — opening drawer');
-    setIsDrawerVisible(true);
-  };
-
   const handleWeekPress = async (id) => {
     setActiveWeek(id);
     // Persist to AsyncStorage to sync with HomeScreen
@@ -323,7 +315,6 @@ export default function ScheduleScreen() {
       order: getExerciseOrder(record),
     }));
     let shareUrl = null;
-    let usingCloudShare = false;
 
     try {
       const shareRef = doc(collection(getDb(), 'sharedSchedules'));
@@ -337,7 +328,6 @@ export default function ScheduleScreen() {
       });
 
       shareUrl = `gymbro://import-schedule/${shareRef.id}`;
-      usingCloudShare = true;
     } catch (error) {
       console.log('Cloud share unavailable, falling back to inline share:', error?.message ?? error);
       shareUrl = buildCompactScheduleUrl(exercisesPayload);
@@ -396,14 +386,6 @@ export default function ScheduleScreen() {
     }
   };
 
-  const drawerActions = [
-    { id: 'home', label: 'My Plan', icon: 'home-outline', onPress: () => navigation.navigate('Home') },
-    { id: 'schedule', label: 'Schedules', icon: 'calendar-outline', onPress: () => navigation.navigate('Schedules') },
-    { id: 'add', label: 'Add Exercise', icon: 'plus-circle-outline', onPress: () => navigation.navigate('Add') },
-    { id: 'pr', label: 'PR Tracker', icon: 'trophy-outline', onPress: () => navigation.navigate('Weight') },
-    { id: 'measurements', label: 'Measurements', icon: 'chart-line', onPress: () => navigation.navigate('Measurements') },
-  ];
-
   const handleExerciseMenuPress = (exercise) => {
     setEditingExercise(exercise);
   };
@@ -443,15 +425,8 @@ export default function ScheduleScreen() {
       <NavHeader
         title="Schedule"
         subtitle="Your workout plan for the week"
-        onLeftPress={debugHandleMenuPress}
         rightIcon={isSharing ? 'loading' : 'share-variant'}
         onRightPress={handleShareSchedule}
-      />
-
-      <TopMenuDrawer
-        visible={isDrawerVisible}
-        onClose={() => setIsDrawerVisible(false)}
-        actions={drawerActions}
       />
 
       <ScrollView

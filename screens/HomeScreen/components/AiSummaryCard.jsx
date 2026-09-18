@@ -1,4 +1,5 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useIsFocused } from '@react-navigation/native';
 import {
   ActivityIndicator,
   LayoutAnimation,
@@ -10,21 +11,14 @@ import {
   UIManager,
   View,
 } from 'react-native';
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useFitnessGoal } from '../../../context/FitnessGoalContext';
+import { GOALS, getGoalTitle, getGoalTrend } from '../../../utils/fitnessGoal';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { generateFitnessSummary } from '../../../FireBase/ai';
 // NOTE: adjust this path to wherever Theme.js actually lives relative to this
 // file — matched to SavedWeightsCard's `../Theme` import, same depth as the
 // FireBase import above.
 import { C } from '../Theme';
-
-const GOAL_STORAGE_KEY = '@gymbro_fitness_goal';
-
-const GOALS = [
-  { id: 'bulk', title: 'Bulk', description: 'Build muscle and increase strength', icon: 'arm-flex' },
-  { id: 'cut', title: 'Cut', description: 'Reduce body fat while maintaining muscle', icon: 'trending-down' },
-  { id: 'maintain', title: 'Maintain', description: 'Maintain your current weight and performance', icon: 'scale-balance' },
-];
 
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
   UIManager.setLayoutAnimationEnabledExperimental(true);
@@ -50,18 +44,10 @@ const getTrendIcon = (trend) => {
   return 'minus';
 };
 
-// Trend color still needs a semantic (green/orange/gray) meaning, independent
-// of the purple brand accent used elsewhere in the card.
-const getTrendColor = (trend) => {
-  if (trend === 'up') return '#4CAF50';
-  if (trend === 'down') return '#FF9800';
-  return C.gray;
-};
-
-const getGoalTitle = (goal) => GOALS.find((item) => item.id === goal)?.title || 'Maintain';
-
 const AiSummaryCard = ({ refreshTrigger = 0 }) => {
-  const [goal, setGoal] = useState(null);
+  const isFocused = useIsFocused();
+  const { goal, loaded, saveGoal } = useFitnessGoal();
+  const requestRef = useRef(0);
   const [selectedGoal, setSelectedGoal] = useState(null);
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -70,44 +56,37 @@ const AiSummaryCard = ({ refreshTrigger = 0 }) => {
   const [error, setError] = useState('');
 
   useEffect(() => {
-    const loadGoal = async () => {
-      try {
-        const savedGoal = await AsyncStorage.getItem(GOAL_STORAGE_KEY);
-        if (savedGoal) {
-          setGoal(savedGoal);
-          setSelectedGoal(savedGoal);
-        } else {
-          setSelectedGoal('maintain');
-          setShowGoalModal(true);
-        }
-      } catch (err) {
-        console.error('[AI Summary] Failed to load goal:', err);
-        setSelectedGoal('maintain');
-        setShowGoalModal(true);
-      }
-    };
-    loadGoal();
-  }, []);
+    if (loaded && !goal) {
+      setSelectedGoal('maintain');
+      setShowGoalModal(true);
+    }
+  }, [loaded, goal]);
 
   const loadSummary = async (selectedGoalValue, forceRefresh = false) => {
     if (!selectedGoalValue) return;
+    const requestId = ++requestRef.current;
+    setLoading(true);
+    setError('');
     try {
-      setLoading(true);
-      setError('');
-      const result = await generateFitnessSummary({ goal: selectedGoalValue, forceRefresh });
-      setSummary(result);
+      const result = await generateFitnessSummary({
+        goal: selectedGoalValue,
+        forceRefresh,
+        onLocalResult: (localResult) => {
+          if (requestId === requestRef.current) setSummary(localResult);
+        },
+      });
+      if (requestId === requestRef.current) setSummary(result);
     } catch (err) {
-      console.error('[AI Summary] Failed:', err);
-      setError(err?.message || 'Unable to generate your fitness summary.');
+      if (requestId === requestRef.current) setError(err?.message || 'Unable to generate your fitness summary.');
     } finally {
-      setLoading(false);
+      if (requestId === requestRef.current) setLoading(false);
     }
   };
 
   useEffect(() => {
-    if (!goal) return;
-    loadSummary(goal, refreshTrigger > 0);
-  }, [goal, refreshTrigger]);
+    if (goal && isFocused) loadSummary(goal, refreshTrigger > 0);
+    return () => { requestRef.current += 1; };
+  }, [goal, refreshTrigger, isFocused]);
 
   const openGoalModal = () => {
     setSelectedGoal(goal || 'maintain');
@@ -117,11 +96,9 @@ const AiSummaryCard = ({ refreshTrigger = 0 }) => {
   const continueWithGoal = async () => {
     const nextGoal = selectedGoal || 'maintain';
     try {
-      await AsyncStorage.setItem(GOAL_STORAGE_KEY, nextGoal);
+      await saveGoal(nextGoal);
       setShowGoalModal(false);
-      if (nextGoal !== goal) {
-        setGoal(nextGoal);
-      } else {
+      if (nextGoal === goal) {
         await loadSummary(nextGoal, true);
       }
     } catch (err) {
@@ -136,9 +113,25 @@ const AiSummaryCard = ({ refreshTrigger = 0 }) => {
     setExpanded((current) => !current);
   };
 
+  const renderTextSection = (title, items) => {
+    if (!Array.isArray(items) || items.length === 0) return null;
+    return (
+      <View style={styles.insightsSection}>
+        <Text style={styles.insightsHeading}>{title}</Text>
+        {items.map((item, index) => (
+          <View key={`${title}-${index}-${item}`} style={styles.insightRow}>
+            <View style={styles.insightDot} />
+            <Text style={styles.insightText}>{item}</Text>
+          </View>
+        ))}
+      </View>
+    );
+  };
+
   if (!goal && !showGoalModal) return null;
 
   const trend = summary?.weightChange?.trend || 'stable';
+  const trendColor = getGoalTrend({ goal, delta: summary?.weightChange?.value, hasComparison: !!summary?.previousWeight }).color;
 
   return (
     <>
@@ -149,18 +142,16 @@ const AiSummaryCard = ({ refreshTrigger = 0 }) => {
             <View style={styles.cardIconBubble}>
               <Icon name="auto-fix" size={20} color={C.purple} />
             </View>
-            <View style={{ marginLeft: 10, flexShrink: 1 }}>
+            <View style={styles.headerTextWrap}>
               <View style={styles.titleRow}>
-                <Text style={styles.cardTitle}>AI Summary</Text>
+                <Text style={styles.cardTitle}>{summary?.aiProvider === 'local' ? 'Progress Summary' : 'AI Summary'}</Text>
                 <TouchableOpacity activeOpacity={0.75} onPress={openGoalModal} style={styles.pill}>
                   <Text style={styles.pillText}>{getGoalTitle(goal)}</Text>
-                  <Icon name="chevron-down" size={14} color={C.purple} style={{ marginLeft: 3 }} />
+                  <Icon name="chevron-down" size={14} color={C.purple} style={styles.pillIcon} />
                 </TouchableOpacity>
               </View>
               <Text style={styles.cardDesc} numberOfLines={expanded ? undefined : 1}>
-                {loading
-                  ? 'Analyzing your progress...'
-                  : summary?.progressSummary || 'Your AI fitness summary will appear here.'}
+                {summary?.progressSummary || (loading ? 'Analyzing your progress...' : 'Your AI fitness summary will appear here.')}
               </Text>
             </View>
           </View>
@@ -168,17 +159,18 @@ const AiSummaryCard = ({ refreshTrigger = 0 }) => {
         </TouchableOpacity>
 
         {/* Collapsed trend line */}
-        {!expanded && summary && !loading && (
+        {!expanded && summary && (
           <View style={styles.trendRow}>
-            <Icon name={getTrendIcon(trend)} size={16} color={getTrendColor(trend)} />
-            <Text style={[styles.trendText, { color: getTrendColor(trend) }]}>
-              {getTrendText(summary.weightChange)}
+            <Icon name={getTrendIcon(trend)} size={16} color={trendColor} />
+            <Text style={[styles.trendText, { color: trendColor }]}>
+              {summary.previousWeight ? getTrendText(summary.weightChange) : 'Add another weigh-in to compare weight.'}
             </Text>
           </View>
         )}
         {!expanded && loading && (
           <View style={styles.trendRow}>
             <ActivityIndicator size="small" color={C.purple} />
+            <Text style={styles.loadingText}>Updating AI analysis…</Text>
           </View>
         )}
         {!expanded && error ? <Text style={styles.errorText}>{error}</Text> : null}
@@ -186,7 +178,7 @@ const AiSummaryCard = ({ refreshTrigger = 0 }) => {
         {/* Expanded content — rows separated like WeightRow, no boxed sections */}
         {expanded && (
           <View style={styles.expandedContent}>
-            {loading ? (
+            {loading && !summary ? (
               <View style={styles.expandedLoading}>
                 <ActivityIndicator size="small" color={C.purple} />
                 <Text style={styles.loadingText}>Analyzing your progress...</Text>
@@ -213,7 +205,7 @@ const AiSummaryCard = ({ refreshTrigger = 0 }) => {
 
                 <View style={[styles.row, styles.rowBorder]}>
                   <View style={styles.iconBubble}>
-                    <Icon name={getTrendIcon(trend)} size={20} color={getTrendColor(trend)} />
+                    <Icon name={getTrendIcon(trend)} size={20} color={trendColor} />
                   </View>
                   <View style={styles.info}>
                     <Text style={styles.title}>Weight Change</Text>
@@ -222,7 +214,7 @@ const AiSummaryCard = ({ refreshTrigger = 0 }) => {
                     </Text>
                   </View>
                   <View style={styles.meta}>
-                    <Text style={[styles.metaValue, { color: getTrendColor(trend) }]}>
+                    <Text style={[styles.metaValue, { color: trendColor }]}>
                       {summary.weightChange?.value > 0 ? '+' : ''}
                       {formatNumber(summary.weightChange?.value)} {summary.weightChange?.unit || 'kg'}
                     </Text>
@@ -247,21 +239,19 @@ const AiSummaryCard = ({ refreshTrigger = 0 }) => {
                   </View>
                 ) : null}
 
-                {summary.insights?.length > 0 && (
-                  <View style={styles.insightsSection}>
-                    <Text style={styles.insightsHeading}>Insights</Text>
-                    {summary.insights.map((insight, index) => (
-                      <View key={`${index}-${insight}`} style={styles.insightRow}>
-                        <View style={styles.insightDot} />
-                        <Text style={styles.insightText}>{insight}</Text>
-                      </View>
-                    ))}
+                {renderTextSection('Performance', summary.performance || summary.insights?.slice(0, 2))}
+                {renderTextSection('Recommendations', summary.recommendations || summary.insights?.slice(2))}
+
+                {loading && (
+                  <View style={styles.refreshingRow}>
+                    <ActivityIndicator size="small" color={C.purple} />
+                    <Text style={styles.loadingText}>Updating AI analysis…</Text>
                   </View>
                 )}
 
                 <TouchableOpacity activeOpacity={0.75} onPress={toggleExpanded} style={styles.collapseButton}>
                   <Text style={styles.pillText}>Show less</Text>
-                  <Icon name="chevron-up" size={15} color={C.purple} style={{ marginLeft: 3 }} />
+                  <Icon name="chevron-up" size={15} color={C.purple} style={styles.pillIcon} />
                 </TouchableOpacity>
               </>
             ) : (
@@ -350,6 +340,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   titleRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' },
+  headerTextWrap: { marginLeft: 10, flexShrink: 1 },
   cardTitle: { fontSize: 16, fontWeight: '700', color: C.white, marginRight: 8 },
   cardDesc: { fontSize: 12, color: C.gray, marginTop: 2 },
 
@@ -363,11 +354,13 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   pillText: { color: C.purple, fontSize: 12, fontWeight: '600' },
+  pillIcon: { marginLeft: 3 },
 
   trendRow: { flexDirection: 'row', alignItems: 'center', marginTop: 10, paddingLeft: 2 },
   trendText: { fontSize: 12, fontWeight: '600', marginLeft: 6 },
   loadingText: { color: C.gray, fontSize: 13, marginLeft: 8 },
   expandedLoading: { flexDirection: 'row', paddingVertical: 20, alignItems: 'center', justifyContent: 'center' },
+  refreshingRow: { flexDirection: 'row', alignItems: 'center', paddingTop: 12 },
   expandedContent: { marginTop: 8 },
   emptyText: { color: C.gray, fontSize: 13, paddingVertical: 15 },
   errorText: { color: '#D98C8C', fontSize: 11, marginTop: 8 },

@@ -15,8 +15,6 @@ import { auth } from '../../FireBase/firebase';
 import { sendPasswordResetEmail, signInWithEmailAndPassword } from 'firebase/auth';
 import Theme from './Theme';
 import AuthInput from './AuthInput';
-import SocialButton from './SocialButton';
-import { signInWithGoogle } from '../../FireBase/firebase';
 
 const getFriendlyAuthError = (error) => {
   const code = error?.code ?? '';
@@ -45,7 +43,6 @@ const SignInScreen = ({ navigation, onSwitchToSignUp }) => {
   const [password, setPassword]       = useState('');
   const [remember, setRemember]       = useState(false);
   const [loading, setLoading]         = useState(false);
-  const [googleLoading, setGoogleLoading] = useState(false);
 
   const passwordRef = useRef(null);
 
@@ -76,18 +73,6 @@ const SignInScreen = ({ navigation, onSwitchToSignUp }) => {
       Alert.alert('Reset email sent', 'Check your inbox for the password reset link.');
     } catch (error) {
       Alert.alert('Reset failed', getFriendlyAuthError(error));
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
-    try {
-      setGoogleLoading(true);
-      await signInWithGoogle();
-      // No navigation needed — App.js onAuthStateChanged fires automatically
-    } catch (error) {
-      Alert.alert('Google sign in failed', getFriendlyAuthError(error));
-    } finally {
-      setGoogleLoading(false);
     }
   };
 

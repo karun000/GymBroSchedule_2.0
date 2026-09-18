@@ -16,8 +16,6 @@ import { createUserWithEmailAndPassword, updateProfile } from 'firebase/auth';
 import Theme from './Theme';
 import AuthInput from './AuthInput';
 import PasswordStrength from './PasswordStrength';
-import SocialButton from './SocialButton';
-import { signInWithGoogle } from '../../FireBase/firebase';
 import { saveUserProfile } from '../../FireBase/records';
 
 const getFriendlyAuthError = (error) => {
@@ -49,7 +47,6 @@ const SignUpScreen = ({ navigation, onSwitchToSignIn }) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [agreeTerms, setAgreeTerms]           = useState(false);
   const [loading, setLoading]                 = useState(false);
-  const [googleLoading, setGoogleLoading]     = useState(false);
 
   const emailRef    = useRef(null);
   const passwordRef = useRef(null);
@@ -86,18 +83,6 @@ const SignUpScreen = ({ navigation, onSwitchToSignIn }) => {
       Alert.alert('Sign up failed', getFriendlyAuthError(error));
     } finally {
       setLoading(false);
-    }
-  };
-
-  const handleGoogleSignIn = async () => {
-    try {
-      setGoogleLoading(true);
-      await signInWithGoogle();
-      // No navigation needed — App.js onAuthStateChanged fires automatically
-    } catch (error) {
-      Alert.alert('Google sign in failed', getFriendlyAuthError(error));
-    } finally {
-      setGoogleLoading(false);
     }
   };
 

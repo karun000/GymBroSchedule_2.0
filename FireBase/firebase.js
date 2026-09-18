@@ -8,6 +8,7 @@ import {
 } from 'firebase/auth';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { getFirestore } from 'firebase/firestore';
+import { getFunctions } from 'firebase/functions';
 import { GoogleSignin } from '@react-native-google-signin/google-signin';
 
 const firebaseConfig = {
@@ -24,13 +25,14 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const persistence = getReactNativePersistence(AsyncStorage);
 const auth = initializeAuth(app, { persistence });
 const db = getFirestore(app);
+const functions = getFunctions(app, 'us-central1');
 
 GoogleSignin.configure({
   webClientId: '598610094756-0r0vqpubcrv5s5kvnpgj9phit8e4c1dd.apps.googleusercontent.com',
   scopes: ['email', 'profile'],
 });
 
-export { auth, db };
+export { auth, db, functions };
 export const getDb = () => db;
 
 export const signInWithGoogle = async () => {

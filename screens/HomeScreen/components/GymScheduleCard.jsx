@@ -60,7 +60,7 @@ export default function GymScheduleCard({
           <View style={styles.iconBubble}>
             <Icon name="calendar-month" size={20} color={C.purple} />
           </View>
-          <View style={{ marginLeft: 10 }}>
+          <View style={styles.headerTextWrap}>
             <Text style={styles.cardTitle}>Gym Schedule</Text>
             <Text style={styles.cardDesc}>Plan your training week by week.</Text>
           </View>
@@ -68,7 +68,7 @@ export default function GymScheduleCard({
 
         <TouchableOpacity style={styles.pill} onPress={onWeekFilter} activeOpacity={0.75}>
           <Text style={styles.pillText}>This Week</Text>
-          <Icon name="chevron-down" size={15} color={C.purple} style={{ marginLeft: 3 }} />
+          <Icon name="chevron-down" size={15} color={C.purple} style={styles.pillIcon} />
         </TouchableOpacity>
       </View>
 
@@ -106,6 +106,7 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   headerLeft: { flexDirection: 'row', alignItems: 'center' },
+  headerTextWrap: { marginLeft: 10 },
   cardTitle:  { fontSize: 16, fontWeight: '700', color: C.white },
   cardDesc:   { fontSize: 12, color: C.gray, marginTop: 2 },
 
@@ -129,6 +130,7 @@ const styles = StyleSheet.create({
     paddingVertical: 7,
   },
   pillText: { color: C.purple, fontSize: 13, fontWeight: '600' },
+  pillIcon: { marginLeft: 3 },
 
   // ScheduleRow
   row: {

@@ -1,12 +1,12 @@
-import React, { useState } from 'react';
+import React, { createContext, useContext, useMemo, useState } from 'react';
 import { TouchableOpacity, StyleSheet, View, Platform } from 'react-native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/Ionicons';
 
 import HomeScreen from '../screens/HomeScreen/page';
+import AddExercisePage from '../screens/AddScreen/page';
 import ScheduleScreen from '../screens/ScheduleScreen/page';
-import AddScreen from '../screens/AddScreen/page';
 import PRScreen from '../screens/PRScreen/page';
 import MeasurementScreen from '../screens/MeasurementsScreen/page';
 import { navigationRef } from '../navigationRef';
@@ -22,19 +22,43 @@ const C = {
 
 const Tab = createBottomTabNavigator();
 
-function AddButton({ onPress, isOpen, onClose }) {
+const AddMenuContext = createContext([false, () => {}]);
+
+function TabBarBackground() {
+  return <View style={styles.tabBarBg} />;
+}
+
+function HomeTabIcon({ color, size }) {
+  return <Icon name="home-outline" size={size} color={color} />;
+}
+
+function ScheduleTabIcon({ color, size }) {
+  return <Icon name="calendar-outline" size={size} color={color} />;
+}
+
+function PRTabIcon({ color, size }) {
+  return <Icon name="barbell-outline" size={size} color={color} />;
+}
+
+function MeasurementTabIcon({ color, size }) {
+  return <Icon name="analytics-outline" size={size} color={color} />;
+}
+
+function AddButton({ onPress }) {
+  const [isOpen, setIsAddMenuOpen] = useContext(AddMenuContext);
+
   const handleNavigate = (routeName) => {
-    onClose();
+    setIsAddMenuOpen(false);
     if (navigationRef.isReady()) {
       if (routeName === 'Measurements') {
-        navigationRef.navigate('Measurements', { openMeasurementModal: true });
+        navigationRef.navigate('MainTabs', { screen: 'Measurements', params: { openMeasurementModal: true } });
         return;
       }
       if (routeName === 'Weight') {
-        navigationRef.navigate('Weight', { openPrModal: true });
+        navigationRef.navigate('MainTabs', { screen: 'Weight', params: { openPrModal: true } });
         return;
       }
-      navigationRef.navigate(routeName);
+      navigationRef.navigate('MainTabs', { screen: routeName });
     }
   };
 
@@ -88,92 +112,76 @@ export default function BottomTabNavigator() {
 
   const TAB_HEIGHT = 58 + bottomInset;
 
+  const addMenuContextValue = useMemo(
+    () => [isAddMenuOpen, setIsAddMenuOpen],
+    [isAddMenuOpen]
+  );
+
   return (
-    <Tab.Navigator
-      screenOptions={{
-        headerShown: false,
-        tabBarShowLabel: true,
-        tabBarActiveTintColor: C.purple,
-        tabBarInactiveTintColor: C.gray,
-        tabBarLabelStyle: styles.tabLabel,
-        tabBarStyle: {
-          ...styles.tabBar,
-          height: TAB_HEIGHT,
-          paddingBottom: bottomInset,
-        },
-        tabBarBackground: () => <View style={styles.tabBarBg} />,
-      }}
-    >
-      <Tab.Screen
-        name="Home"
-        component={HomeScreen}
-        listeners={{ tabPress: () => setIsAddMenuOpen(false) }}
-        options={{
-          tabBarLabel: 'My Plan',
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="home-outline" size={size} color={color} />
-          ),
-        }}
-      />
-
-      <Tab.Screen
-        name="Schedules"
-        component={ScheduleScreen}
-        listeners={{ tabPress: () => setIsAddMenuOpen(false) }}
-        options={{
-          tabBarLabel: 'Schedules',
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="calendar-outline" size={size} color={color} />
-          ),
-        }}
-      />
-
-      <Tab.Screen
-        name="Add"
-        component={AddScreen}
-        listeners={{
-          tabPress: (e) => {
-            e.preventDefault();
-            setIsAddMenuOpen((current) => !current);
+    <AddMenuContext.Provider value={addMenuContextValue}>
+      <Tab.Navigator
+        screenOptions={{
+          headerShown: false,
+          tabBarShowLabel: true,
+          tabBarActiveTintColor: C.purple,
+          tabBarInactiveTintColor: C.gray,
+          tabBarLabelStyle: styles.tabLabel,
+          tabBarStyle: {
+            ...styles.tabBar,
+            height: TAB_HEIGHT,
+            paddingBottom: bottomInset,
           },
+          tabBarBackground: TabBarBackground,
         }}
-        options={{
-          tabBarLabel: '',
-          tabBarIcon: () => null,
-          tabBarButton: (props) => (
-            <AddButton
-              {...props}
-              isOpen={isAddMenuOpen}
-              onClose={() => setIsAddMenuOpen(false)}
-            />
-          ),
-        }}
-      />
+      >
+        <Tab.Screen
+          name="Home"
+          component={HomeScreen}
+          listeners={{ tabPress: () => setIsAddMenuOpen(false) }}
+          options={{
+            tabBarLabel: 'My Plan',
+            tabBarIcon: HomeTabIcon,
+          }}
+        />
 
-      <Tab.Screen
-        name="Weight"
-        component={PRScreen}
-        listeners={{ tabPress: () => setIsAddMenuOpen(false) }}
-        options={{
-          tabBarLabel: 'PR',
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="barbell-outline" size={size} color={color} />
-          ),
-        }}
-      />
+        <Tab.Screen
+          name="Schedules"
+          component={ScheduleScreen}
+          listeners={{ tabPress: () => setIsAddMenuOpen(false) }}
+          options={{ tabBarLabel: 'Schedules', tabBarIcon: ScheduleTabIcon }}
+        />
 
-      <Tab.Screen
-        name="Measurements"
-        component={MeasurementScreen}
-        listeners={{ tabPress: () => setIsAddMenuOpen(false) }}
-        options={{
-          tabBarLabel: 'Measures',
-          tabBarIcon: ({ color, size }) => (
-            <Icon name="analytics-outline" size={size} color={color} />
-          ),
-        }}
-      />
-    </Tab.Navigator>
+        <Tab.Screen
+          name="Add"
+          component={AddExercisePage}
+          listeners={{
+            tabPress: (e) => {
+              e.preventDefault();
+              setIsAddMenuOpen((current) => !current);
+            },
+          }}
+          options={{
+            tabBarLabel: '',
+            tabBarIcon: () => null,
+            tabBarButton: AddButton,
+          }}
+        />
+
+        <Tab.Screen
+          name="Weight"
+          component={PRScreen}
+          listeners={{ tabPress: () => setIsAddMenuOpen(false) }}
+          options={{ tabBarLabel: 'PR', tabBarIcon: PRTabIcon }}
+        />
+
+        <Tab.Screen
+          name="Measurements"
+          component={MeasurementScreen}
+          listeners={{ tabPress: () => setIsAddMenuOpen(false) }}
+          options={{ tabBarLabel: 'Measures', tabBarIcon: MeasurementTabIcon }}
+        />
+      </Tab.Navigator>
+    </AddMenuContext.Provider>
   );
 }
 

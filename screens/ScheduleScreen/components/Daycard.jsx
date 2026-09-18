@@ -57,7 +57,7 @@ export default function DayCard({
               name={expanded ? 'chevron-up' : 'chevron-down'}
               size={22}
               color={C.grayMid}
-              style={{ marginLeft: 6 }}
+              style={styles.expandIcon}
             />
           )}
         </View>
@@ -125,6 +125,9 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: C.gray,
     fontWeight: '500',
+  },
+  expandIcon: {
+    marginLeft: 6,
   },
 
   // Exercise list separator

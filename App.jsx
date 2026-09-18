@@ -1,13 +1,16 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Alert, AppState, Linking, StyleSheet } from 'react-native';
 import { NavigationContainer } from '@react-navigation/native';
+import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { SafeAreaProvider, SafeAreaView } from 'react-native-safe-area-context';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { auth } from './FireBase/firebase';
 import { onAuthStateChanged } from 'firebase/auth';
 import BottomTabNavigator from './components/BottomNav';
+import SubscriptionScreen from './screens/SubscriptionScreen/page';
 import { navigationRef } from './navigationRef';
 import ThemeProvider from './context/ThemeContext';
+import FitnessGoalProvider from './context/FitnessGoalContext';
 import DrawerProvider, { DrawerContext } from './context/DrawerContext';
 import TopMenuDrawer from './components/TopMenuDrawer';
 import SignInScreen from './screens/Auth/page';
@@ -22,11 +25,14 @@ import {
   shouldSendDailyReminder,
 } from './utils/appOpenReminder';
 
+const Stack = createNativeStackNavigator();
+
 export default function App() {
   const [user, setUser] = useState(undefined);
   const [authMode, setAuthMode] = useState('signin');
   const pendingImportUrlRef = useRef(null);
   const importedShareIdsRef = useRef(new Set());
+
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (firebaseUser) => {
@@ -98,7 +104,7 @@ export default function App() {
       );
 
       if (navigationRef.isReady()) {
-        navigationRef.navigate('Schedules');
+        navigationRef.navigate('MainTabs', { screen: 'Schedules' });
       }
     } catch (error) {
       importedShareIdsRef.current.delete(importKey);
@@ -207,20 +213,36 @@ export default function App() {
   // Session restored or just signed in — show main app
   return (
     <SafeAreaProvider> {/* ← WRAP */}
-      <ThemeProvider>
+      <FitnessGoalProvider key={user.uid} userId={user.uid}>
+        <ThemeProvider>
         <DrawerProvider>
-          <NavigationContainer ref={navigationRef}>
-            <BottomTabNavigator />
-          </NavigationContainer>
-
           <DrawerContext.Consumer>
             {({ visible, close }) => (
-              <TopMenuDrawer visible={visible} onClose={close} />
+              <>
+                <NavigationContainer
+                  ref={navigationRef}
+                  onStateChange={close}
+                >
+                  <Stack.Navigator screenOptions={{ headerShown: false }}>
+                    <Stack.Screen name="MainTabs" component={MainTabs} />
+                    {/* "Subscription" must be EXACTLY this name — drawer navigates to it */}
+                    <Stack.Screen name="Subscription" component={SubscriptionScreen} />
+                  </Stack.Navigator>
+                </NavigationContainer>
+                <TopMenuDrawer visible={visible} onClose={close} />
+              </>
             )}
           </DrawerContext.Consumer>
         </DrawerProvider>
       </ThemeProvider>
+      </FitnessGoalProvider>
     </SafeAreaProvider>
+  );
+}
+
+function MainTabs() {
+  return (
+    <BottomTabNavigator />
   );
 }
 

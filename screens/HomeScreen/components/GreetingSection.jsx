@@ -19,6 +19,25 @@ const parseNumericValue = (value) => {
   return Number.isFinite(parsedValue) ? parsedValue : null;
 };
 
+// ─── Card inner content (shared between iOS blur and Android fallback) ───────
+function CardContent({ loading, weight, date }) {
+  return (
+    <>
+      <Text style={styles.cardLabel}>Latest Weight</Text>
+      {loading ? (
+        <ActivityIndicator size="small" color={C.purple} style={styles.spinner} />
+      ) : (
+        <>
+          <Text style={styles.cardValue}>{weight}</Text>
+          {date && (
+            <Text style={styles.cardDate}>{date}</Text>
+          )}
+        </>
+      )}
+    </>
+  );
+}
+
 export default function GreetingSection({
   name: propName = 'Karun',
   subtitle = 'Stay consistent and crush your goals.',
@@ -100,24 +119,10 @@ export default function GreetingSection({
     });
   };
 
-  // ─── Card inner content (shared between iOS blur and Android fallback) ───────
-  const CardContent = () => (
-    <>
-      <Text style={styles.cardLabel}>Latest Weight</Text>
-      {loading ? (
-        <ActivityIndicator size="small" color={C.purple} style={styles.spinner} />
-      ) : (
-        <>
-          <Text style={styles.cardValue}>{weightDisplay()}</Text>
-          {dateDisplay() && (
-            <Text style={styles.cardDate}>{dateDisplay()}</Text>
-          )}
-        </>
-      )}
-    </>
-  );
-
   // ─── Render ─────────────────────────────────────────────────────────────────
+  const weight = weightDisplay();
+  const date = dateDisplay();
+
   return (
     <View style={styles.main}>
       {/* Greeting */}
@@ -130,12 +135,12 @@ export default function GreetingSection({
       {Platform.OS === 'ios' ? (
         <BlurSurface style={styles.card} backgroundColor="rgba(20,20,42,0.72)">
           <View style={styles.cardInner}>
-            <CardContent />
+            <CardContent loading={loading} weight={weight} date={date} />
           </View>
         </BlurSurface>
       ) : (
         <View style={[styles.card, styles.cardAndroid]}>
-          <CardContent />
+          <CardContent loading={loading} weight={weight} date={date} />
         </View>
       )}
     </View>

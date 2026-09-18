@@ -377,12 +377,12 @@ export default function HomeScreen() {
   };
 
   const handleViewAll     = () => {
-    if (navigationRef.isReady()) navigationRef.navigate('Weight');
+    if (navigationRef.isReady()) navigationRef.navigate('MainTabs', { screen: 'Weight' });
   };
   const handleAddExercise = () => console.log('Add exercise');
   const handleWeightRow   = (item) => console.log('Weight row pressed:', item.title);
   const handleViewInsights = () => {
-    if (navigationRef.isReady()) navigationRef.navigate('PR');
+    if (navigationRef.isReady()) navigationRef.navigate('MainTabs', { screen: 'Weight' });
   };
 
   // ── Render ────────────────────────────────────────────────────────────────

@@ -7,7 +7,6 @@ import {
   StyleSheet,
   Text,
   TouchableOpacity,
-  TouchableWithoutFeedback,
   View,
 } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -61,11 +60,8 @@ export default function TopMenuDrawer({ visible, onClose }) {
   };
 
   return (
-    <Modal visible={visible} transparent animationType="none" onRequestClose={onClose}>
-      <TouchableWithoutFeedback onPress={onClose}>
-        <View style={styles.modalContainer}>
-          <View style={styles.backdrop} />
-
+    <Modal visible={visible} transparent statusBarTranslucent navigationBarTranslucent animationType="none" onRequestClose={onClose}>
+      <View style={styles.modalContainer}>
           <Animated.View
             pointerEvents="auto"
             style={[
@@ -130,8 +126,15 @@ export default function TopMenuDrawer({ visible, onClose }) {
               </TouchableOpacity>
             </View>
           </Animated.View>
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="Close menu"
+            testID="drawer-outside-dismiss"
+            style={styles.backdrop}
+            onPressIn={onClose}
+            onPress={onClose}
+          />
         </View>
-      </TouchableWithoutFeedback>
     </Modal>
   );
 }
@@ -139,24 +142,20 @@ export default function TopMenuDrawer({ visible, onClose }) {
 const styles = StyleSheet.create({
   modalContainer: {
     flex: 1,
-    position: 'relative',
-    backgroundColor: 'transparent',
-  },
-  backdrop: {
-    ...StyleSheet.absoluteFillObject,
+    flexDirection: 'row',
     backgroundColor: 'rgba(0, 0, 0, 0.45)',
   },
+  backdrop: {
+    flex: 1,
+    alignSelf: 'stretch',
+  },
   drawer: {
-    position: 'absolute',
-    left: 0,
-    top: 0,
-    bottom: 0,
     width: '82%',
     maxWidth: 340,
+    flexShrink: 0,
     borderRightWidth: 1,
     paddingTop: 56,
     paddingHorizontal: 16,
-    zIndex: 2,
     shadowColor: '#000000',
     shadowOpacity: 0.2,
     shadowRadius: 10,
