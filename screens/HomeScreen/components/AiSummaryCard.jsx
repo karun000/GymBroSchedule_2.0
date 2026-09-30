@@ -15,6 +15,11 @@ import { useFitnessGoal } from '../../../context/FitnessGoalContext';
 import { GOALS, getGoalTitle, getGoalTrend } from '../../../utils/fitnessGoal';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { generateFitnessSummary } from '../../../FireBase/ai';
+import {
+  failSummaryProcessing,
+  finishSummaryProcessing,
+  startSummaryProcessing,
+} from '../../../utils/summaryNotifications';
 // NOTE: adjust this path to wherever Theme.js actually lives relative to this
 // file — matched to SavedWeightsCard's `../Theme` import, same depth as the
 // FireBase import above.
@@ -67,6 +72,7 @@ const AiSummaryCard = ({ refreshTrigger = 0 }) => {
     const requestId = ++requestRef.current;
     setLoading(true);
     setError('');
+    startSummaryProcessing();
     try {
       const result = await generateFitnessSummary({
         goal: selectedGoalValue,
@@ -75,8 +81,10 @@ const AiSummaryCard = ({ refreshTrigger = 0 }) => {
           if (requestId === requestRef.current) setSummary(localResult);
         },
       });
+      finishSummaryProcessing(result?.progressSummary);
       if (requestId === requestRef.current) setSummary(result);
     } catch (err) {
+      failSummaryProcessing();
       if (requestId === requestRef.current) setError(err?.message || 'Unable to generate your fitness summary.');
     } finally {
       if (requestId === requestRef.current) setLoading(false);

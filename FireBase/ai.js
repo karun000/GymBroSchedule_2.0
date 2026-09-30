@@ -1,25 +1,6 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
+import { httpsCallable } from 'firebase/functions';
 import { fetchUserRecords } from './records';
-import { auth } from './firebase';
-import { createSummaryCache } from '../utils/aiSummaryCache';
-
-const getCachedSummary = createSummaryCache(AsyncStorage);
-
-// -----------------------------------------------------------------------------
-// API KEYS
-// -----------------------------------------------------------------------------
-// IMPORTANT: These keys have been exposed in source code/chat.
-// Revoke them and create new keys before using this in a real app.
-const NVIDIA_NIM_API_KEY = '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';
-
-// -----------------------------------------------------------------------------
-// MODELS
-// -----------------------------------------------------------------------------
-
-// FIXED: was 'nvidia/nemotron-3.5-lightning-30b-a3b' (timing out).
-// Switched to z-ai/glm-5.3-flash which is fast and matches the NVIDIA example.
-const NVIDIA_MODEL = 'z-ai/glm-5.3-flash';
-const NVIDIA_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
+import { auth, functions } from './firebase';
 
 // -----------------------------------------------------------------------------
 // HELPERS
@@ -344,112 +325,6 @@ const generateLocalSummary = ({
   };
 };
 
-// -----------------------------------------------------------------------------
-// AI PROMPT
-// -----------------------------------------------------------------------------
-
-const buildAIPrompt = ({
-  goal,
-  latestWeight,
-  previousWeight,
-  weightChange,
-  weightTrend,
-  weightHistory,
-  prProgress,
-}) => {
-  const historyForAI = weightHistory.slice(-7).map((item) => ({
-    value: item.value,
-    unit: item.unit,
-    date: item.dateLabel,
-  }));
-
-  return `
-You are the fitness progress assistant inside a gym tracking app.
-
-USER GOAL:
-${goal}
-
-The numerical data below is factual and has already been calculated by the
-application. You MUST NOT change, calculate, invent, or replace these values.
-
-LATEST WEIGHT:
-${latestWeight
-    ? `${latestWeight.value} ${latestWeight.unit}`
-    : 'No weight recorded'}
-
-LATEST WEIGHT DATE:
-${latestWeight?.dateLabel || 'Unknown'}
-
-PREVIOUS WEIGHT:
-${previousWeight
-    ? `${previousWeight.value} ${previousWeight.unit}`
-    : 'No previous weight recorded'}
-
-WEIGHT CHANGE:
-${previousWeight
-    ? `${weightChange > 0 ? '+' : ''}${weightChange} ${latestWeight?.unit || 'kg'}`
-    : 'Not available'}
-
-WEIGHT TREND:
-${weightTrend}
-
-RECENT WEIGHT HISTORY:
-${JSON.stringify(historyForAI, null, 2)}
-
-PR PROGRESS:
-${JSON.stringify(prProgress, null, 2)}
-
-Write a concise progress summary.
-
-Requirements:
-- Consider the selected goal.
-- Explain the weight direction.
-- Explain whether that direction generally aligns with the goal.
-- Consider the recent history.
-- Mention PR progress only when useful.
-- Never invent numbers.
-- Never modify the supplied numbers.
-- Do not discuss workout plans.
-- Do not mention today's workout.
-- Do not say "your progress data has been updated".
-- Do not use markdown.
-- Do not include any reasoning, thinking, or explanation outside the JSON.
-- Return ONLY a single JSON object and nothing else — no preamble, no code fences.
-
-The JSON object must have exactly these two keys:
-- "progressSummary": one original sentence, written by you, summarizing the
-  data above. This must be actual prose about THIS user's numbers — never a
-  template, a description of what the field should contain, or any text
-  wrapped in angle brackets or quotes-within-quotes.
-- "insights": an array of exactly 3 original sentences, each a distinct
-  factual insight written by you from the data above. Same rule: real
-  sentences about this data, never a placeholder or a restatement of these
-  instructions.
-
-Do not include angle brackets, square brackets, or any part of these
-instructions in your output. If you are unsure what to write, look again at
-the LATEST WEIGHT, WEIGHT CHANGE, WEIGHT TREND, and PR PROGRESS values above
-and describe them in your own words.
-`;
-};
-
-// -----------------------------------------------------------------------------
-// JSON EXTRACTION
-// -----------------------------------------------------------------------------
-// Reasoning models (like the NVIDIA Nemotron model used here) often emit a
-// chain-of-thought "thinking" section before the actual answer. That thinking
-// section frequently *echoes* the prompt, including the placeholder JSON
-// format example ("One concise sentence.", "Useful factual insight.").
-//
-// A naive "first { ... last }" extraction picks up that placeholder example
-// instead of the model's real answer. To avoid this we:
-//   1. Strip <think>...</think> blocks if the model uses them.
-//   2. Scan for every brace-balanced JSON object in the text (not just the
-//      first/last braces).
-//   3. Parse each candidate and keep the LAST one that both matches the
-//      expected shape and is not the literal placeholder text.
-// -----------------------------------------------------------------------------
-
 // Known literal placeholder strings from earlier prompt versions, kept here
 // in case any cached client/prompt still sends them.
 const KNOWN_PLACEHOLDER_PHRASES = new Set([
@@ -501,181 +376,20 @@ const isValidSummaryShape = (candidate) =>
   typeof candidate.progressSummary === 'string' &&
   candidate.progressSummary.trim().length > 0;
 
-// Find every top-level, brace-balanced {...} substring in text.
-const findJsonObjectCandidates = (text) => {
-  const candidates = [];
-  let depth = 0;
-  let start = -1;
-  let inString = false;
-  let escapeNext = false;
+const generateNvidiaNimSummary = async (payload, forceRefresh) => {
+  const generateOnServer = httpsCallable(
+    functions,
+    'generateFitnessSummary',
+    { timeout: 360000 },
+  );
+  const response = await generateOnServer({ payload, forceRefresh });
+  const result = response?.data?.summary;
 
-  for (let i = 0; i < text.length; i += 1) {
-    const char = text[i];
-
-    if (inString) {
-      if (escapeNext) {
-        escapeNext = false;
-      } else if (char === '\\') {
-        escapeNext = true;
-      } else if (char === '"') {
-        inString = false;
-      }
-      continue;
-    }
-
-    if (char === '"') {
-      inString = true;
-      continue;
-    }
-
-    if (char === '{') {
-      if (depth === 0) start = i;
-      depth += 1;
-    } else if (char === '}') {
-      if (depth > 0) {
-        depth -= 1;
-        if (depth === 0 && start !== -1) {
-          candidates.push(text.slice(start, i + 1));
-          start = -1;
-        }
-      }
-    }
+  if (!isValidSummaryShape(result) || isPlaceholderResult(result)) {
+    throw new Error('The summary server returned an invalid response.');
   }
 
-  return candidates;
-};
-
-const parseAIJson = (rawText) => {
-  if (!rawText || typeof rawText !== 'string') {
-    throw new Error('AI returned empty text.');
-  }
-
-  // Strip explicit <think>...</think> reasoning blocks, if present.
-  let cleaned = rawText.replace(/<think>[\s\S]*?<\/think>/gi, '').trim();
-
-  // Remove markdown fences.
-  cleaned = cleaned
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/\s*```$/i, '')
-    .trim();
-
-  const candidates = findJsonObjectCandidates(cleaned);
-
-  if (candidates.length === 0) {
-    throw new Error('AI response did not contain valid JSON.');
-  }
-
-  // Walk candidates from LAST to FIRST — the real answer comes after any
-  // "thinking"/prompt-echo text, so the last valid, non-placeholder object
-  // is the one we want.
-  let firstValidButPlaceholder = null;
-
-  for (let i = candidates.length - 1; i >= 0; i -= 1) {
-    let parsed;
-    try {
-      parsed = JSON.parse(candidates[i]);
-    } catch {
-      continue;
-    }
-
-    if (!isValidSummaryShape(parsed)) continue;
-
-    if (isPlaceholderResult(parsed)) {
-      firstValidButPlaceholder = firstValidButPlaceholder || parsed;
-      continue;
-    }
-
-    return parsed;
-  }
-
-  // Every valid candidate was the placeholder (model got cut off before the
-  // real answer) — treat this as a failure so the caller falls back.
-  if (firstValidButPlaceholder) {
-    throw new Error('AI response only contained the placeholder JSON example.');
-  }
-
-  throw new Error('AI response did not contain valid JSON.');
-};
-
-// -----------------------------------------------------------------------------
-// NVIDIA NIM  —  z-ai/glm-5.3-flash
-// -----------------------------------------------------------------------------
-// FIXED: Switched model from nemotron-3.5 (slow, timing out) to glm-5.3-flash.
-// System message is now a real assistant description instead of the
-// Nemotron-specific "detailed thinking off" toggle.
-// temperature/top_p/max_tokens aligned with the official NVIDIA example.
-// -----------------------------------------------------------------------------
-
-const generateNvidiaNimSummary = async (payload) => {
-  if (!NVIDIA_NIM_API_KEY) {
-    throw new Error('NVIDIA API key is missing.');
-  }
-
-  const prompt = buildAIPrompt(payload);
-
-  const requestBody = {
-    model: NVIDIA_MODEL,
-
-    messages: [
-      {
-        role: 'system',
-        content: 'You are a fitness progress assistant inside a gym tracking app.',
-      },
-      {
-        role: 'user',
-        content: prompt,
-      },
-    ],
-
-    temperature: 0.5,
-    top_p: 1,
-    max_tokens: 1024,
-    stream: false,
-  };
-
-  // Do not abort NVIDIA requests from the client. NVIDIA may take longer than
-  // the fallback provider, and the caller should wait for the complete result.
-  const response = await fetch(NVIDIA_URL, {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${NVIDIA_NIM_API_KEY}`,
-      Accept: 'application/json',
-    },
-    body: JSON.stringify(requestBody),
-  });
-
-  if (!response.ok) {
-    const errorText = await response.text();
-
-    throw new Error(
-      `NVIDIA NIM request failed (${response.status}): ${errorText}`
-    );
-  }
-
-  const data = await response.json();
-
-  const message = data?.choices?.[0]?.message || {};
-
-  // Some NIM deployments return the chain-of-thought in a separate
-  // `reasoning_content` field and keep `content` clean — prefer that when
-  // present, otherwise fall back to `content` (which may still contain
-  // <think> tags that parseAIJson will strip).
-  const text = message.content || message.reasoning_content || '';
-
-  if (!text) {
-    throw new Error('NVIDIA NIM returned an empty response.');
-  }
-
-  console.log('[AI] NVIDIA raw response:', text);
-
-  const result = parseAIJson(text);
-
-  return {
-    ...result,
-    provider: 'nvidia',
-  };
+  return result;
 };
 
 // -----------------------------------------------------------------------------
@@ -871,22 +585,11 @@ export const generateFitnessSummary = async ({
     const localFallback =
       generateLocalSummary(aiPayload);
 
-    // -------------------------------------------------------------------------
-    // CHECK CACHE (skips both AI calls entirely when data hasn't changed)
-    // -------------------------------------------------------------------------
-
     let aiResult;
     try {
-      aiResult = await getCachedSummary(userId, {
-        prs: prRecords,
-        measurements: measurementRecords,
-      }, async () => {
-        const result = await generateNvidiaNimSummary(aiPayload);
-        if (!isValidSummaryShape(result) || isPlaceholderResult(result)) {
-          throw new Error('NVIDIA returned an invalid summary.');
-        }
-        return result;
-      });
+      // Always reconcile with the server. The Cloud Function owns caching and
+      // persists a completed result even if this process disappears mid-call.
+      aiResult = await generateNvidiaNimSummary(aiPayload, forceRefresh);
     } catch (error) {
       console.warn('[AI Summary] NVIDIA summary unavailable:', error?.name || 'Error');
       aiResult = localFallback;
