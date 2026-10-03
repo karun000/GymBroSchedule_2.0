@@ -21,6 +21,25 @@ const NVIDIA_NIM_API_KEY = 'nvapi-5idm4NOtvDVVu5Kddn0HL1qnqQ176ub7FaZl7u7ere0r_p
 const NVIDIA_MODEL = 'z-ai/glm-5.3-flash';
 const NVIDIA_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
 
+const fetchNvidia = async (options) => {
+  let lastError;
+
+  for (let attempt = 0; attempt < 2; attempt += 1) {
+    try {
+      return await fetch(NVIDIA_URL, options);
+    } catch (error) {
+      lastError = error;
+      if (!(error instanceof TypeError) || attempt === 1) break;
+      await new Promise((resolve) => setTimeout(resolve, 1200));
+    }
+  }
+
+  throw new Error(
+    `NVIDIA network request failed: ${lastError?.message || 'unknown network error'}`,
+    { cause: lastError },
+  );
+};
+
 // -----------------------------------------------------------------------------
 // HELPERS
 // -----------------------------------------------------------------------------
@@ -630,18 +649,22 @@ const generateNvidiaNimSummary = async (payload) => {
 
     temperature: 0.5,
     top_p: 1,
-    max_tokens: 1024,
-    stream: false,
+    max_tokens: 512,
+    reasoning_effort: 'low',
+    chat_template_kwargs: {
+      clear_thinking: true,
+    },
+    stream: true,
   };
 
   // Do not abort NVIDIA requests from the client. NVIDIA may take longer than
   // the fallback provider, and the caller should wait for the complete result.
-  const response = await fetch(NVIDIA_URL, {
+  const response = await fetchNvidia({
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
       Authorization: `Bearer ${NVIDIA_NIM_API_KEY}`,
-      Accept: 'application/json',
+      Accept: 'text/event-stream',
     },
     body: JSON.stringify(requestBody),
   });
@@ -654,21 +677,37 @@ const generateNvidiaNimSummary = async (payload) => {
     );
   }
 
-  const data = await response.json();
+  const rawStream = await response.text();
+  let content = '';
+  let reasoningContent = '';
 
-  const message = data?.choices?.[0]?.message || {};
+  rawStream.split(/\r?\n/).forEach((line) => {
+    const payloadText = line.startsWith('data:')
+      ? line.slice(5).trim()
+      : '';
+    if (!payloadText || payloadText === '[DONE]') return;
+
+    try {
+      const chunk = JSON.parse(payloadText);
+      const delta = chunk?.choices?.[0]?.delta || {};
+      if (typeof delta.content === 'string') content += delta.content;
+      if (typeof delta.reasoning_content === 'string') {
+        reasoningContent += delta.reasoning_content;
+      }
+    } catch {
+      // Ignore keep-alive or malformed stream lines and continue collecting.
+    }
+  });
 
   // Some NIM deployments return the chain-of-thought in a separate
   // `reasoning_content` field and keep `content` clean — prefer that when
   // present, otherwise fall back to `content` (which may still contain
   // <think> tags that parseAIJson will strip).
-  const text = message.content || message.reasoning_content || '';
+  const text = content || reasoningContent;
 
   if (!text) {
     throw new Error('NVIDIA NIM returned an empty response.');
   }
-
-  console.log('[AI] NVIDIA raw response:', text);
 
   const result = parseAIJson(text);
 
@@ -888,7 +927,10 @@ export const generateFitnessSummary = async ({
         return result;
       });
     } catch (error) {
-      console.warn('[AI Summary] NVIDIA summary unavailable:', error?.name || 'Error');
+      console.warn(
+        '[AI Summary] NVIDIA summary unavailable:',
+        error?.message || error?.name || 'Unknown error',
+      );
       aiResult = localFallback;
     }
 

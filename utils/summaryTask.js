@@ -14,7 +14,16 @@ const STATE_KEY = '@gymbro_summary_task_state';
 
 let currentTask = null;
 let notificationSetup = null;
+let finishForegroundTask = null;
+let foregroundTaskCompleted = false;
 const listeners = new Set();
+
+export const runSummaryForegroundService = () => {
+  if (foregroundTaskCompleted) return Promise.resolve();
+  return new Promise((resolve) => {
+    finishForegroundTask = resolve;
+  });
+};
 
 const emit = (state) => {
   listeners.forEach((listener) => listener(state));
@@ -71,7 +80,7 @@ const notification = (title, body, ongoing = true) => ({
   body,
   android: {
     channelId: CHANNEL_ID,
-    smallIcon: 'ic_launcher',
+    smallIcon: 'ic_notification',
     largeIcon: 'ic_launcher',
     ongoing,
     onlyAlertOnce: true,
@@ -86,12 +95,13 @@ export const startSummaryTask = async ({ goal, forceRefresh = false }) => {
   if (currentTask) return currentTask;
 
   currentTask = (async () => {
-    await ensureNotifications();
-    const started = { status: 'running', startedAt: new Date().toISOString() };
-    await saveState(started);
-    await notifee.displayNotification(notification('GymBro', 'Updating your fitness summary…'));
-
+    foregroundTaskCompleted = false;
     try {
+      await ensureNotifications();
+      const started = { status: 'running', startedAt: new Date().toISOString() };
+      await saveState(started);
+      await notifee.displayNotification(notification('GymBro', 'Updating your fitness summary…'));
+
       // Keep the existing API call and arguments unchanged.
       const result = await generateFitnessSummary({ goal, forceRefresh });
       const completed = {
@@ -104,10 +114,15 @@ export const startSummaryTask = async ({ goal, forceRefresh = false }) => {
       return result;
     } catch (error) {
       await saveState({ status: 'failed', error: error?.message || 'Unable to update your summary.' });
-      await notifee.displayNotification(notification('GymBro', 'Could not update your fitness summary.', false));
+      try {
+        await notifee.displayNotification(notification('GymBro', 'Could not update your fitness summary.', false));
+      } catch { /* notification setup may be the failed operation */ }
       throw error;
     } finally {
       if (Platform.OS === 'android') {
+        foregroundTaskCompleted = true;
+        finishForegroundTask?.();
+        finishForegroundTask = null;
         try { await notifee.stopForegroundService(); } catch { /* service may not be active */ }
       }
       currentTask = null;
