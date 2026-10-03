@@ -22,11 +22,12 @@ export default function DayCard({
   showExpandIcon = true,
   showMoreIcon = true,
   showEquipment = true,
+  style,
 }) {
   const count = day.exercises.length;
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, style]}>
 
       {/* ── Accordion header ── */}
       <TouchableOpacity
@@ -87,9 +88,8 @@ const styles = StyleSheet.create({
     backgroundColor: C.card,
     borderRadius: 20,
     // paddingHorizontal: 14,
-    paddingTop: 16,
-    paddingBottom: 4,
-    marginBottom: 24,
+    paddingBottom: 2,
+    marginBottom: 2,
   },
 
   // Header row

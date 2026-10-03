@@ -14,12 +14,11 @@ import {
 import { useFitnessGoal } from '../../../context/FitnessGoalContext';
 import { GOALS, getGoalTitle, getGoalTrend } from '../../../utils/fitnessGoal';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { generateFitnessSummary } from '../../../FireBase/ai';
 import {
-  failSummaryProcessing,
-  finishSummaryProcessing,
-  startSummaryProcessing,
-} from '../../../utils/summaryNotifications';
+  getSummaryTaskState,
+  startSummaryTask,
+  subscribeToSummaryTask,
+} from '../../../utils/summaryTask';
 // NOTE: adjust this path to wherever Theme.js actually lives relative to this
 // file — matched to SavedWeightsCard's `../Theme` import, same depth as the
 // FireBase import above.
@@ -72,19 +71,13 @@ const AiSummaryCard = ({ refreshTrigger = 0 }) => {
     const requestId = ++requestRef.current;
     setLoading(true);
     setError('');
-    startSummaryProcessing();
     try {
-      const result = await generateFitnessSummary({
+      const result = await startSummaryTask({
         goal: selectedGoalValue,
         forceRefresh,
-        onLocalResult: (localResult) => {
-          if (requestId === requestRef.current) setSummary(localResult);
-        },
       });
-      finishSummaryProcessing(result?.progressSummary);
       if (requestId === requestRef.current) setSummary(result);
     } catch (err) {
-      failSummaryProcessing();
       if (requestId === requestRef.current) setError(err?.message || 'Unable to generate your fitness summary.');
     } finally {
       if (requestId === requestRef.current) setLoading(false);
@@ -92,8 +85,22 @@ const AiSummaryCard = ({ refreshTrigger = 0 }) => {
   };
 
   useEffect(() => {
+    let active = true;
+    getSummaryTaskState().then((state) => {
+      if (!active || state.status === 'running') {
+        if (active && state.status === 'running') setLoading(true);
+        return;
+      }
+      if (state.result && active) setSummary(state.result);
+    });
+    const unsubscribe = subscribeToSummaryTask((state) => {
+      if (!active) return;
+      setLoading(state.status === 'running');
+      if (state.result) setSummary(state.result);
+      if (state.status === 'failed') setError(state.error || 'Unable to generate your fitness summary.');
+    });
     if (goal && isFocused) loadSummary(goal, refreshTrigger > 0);
-    return () => { requestRef.current += 1; };
+    return () => { active = false; requestRef.current += 1; unsubscribe(); };
   }, [goal, refreshTrigger, isFocused]);
 
   const openGoalModal = () => {

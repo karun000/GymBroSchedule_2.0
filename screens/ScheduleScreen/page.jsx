@@ -528,11 +528,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollContent: {
-    paddingTop: 0,
+    paddingTop: 4,
+    paddingHorizontal: 16,
     paddingBottom: 0,
   },
   dayCardSpacing: {
-    marginTop: 12,
+    marginTop: 8,
   },
   modalBackdrop: {
     flex: 1,

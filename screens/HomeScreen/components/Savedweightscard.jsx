@@ -90,6 +90,7 @@ export default function SavedWeightsCard({
 const styles = StyleSheet.create({
   // Card shell
   card: {
+    marginTop:10,
     backgroundColor: C.card,
     borderRadius: 20,
     paddingHorizontal: 14,

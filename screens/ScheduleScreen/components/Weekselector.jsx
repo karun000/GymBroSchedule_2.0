@@ -40,7 +40,7 @@ export default function WeekSelector({ weeks, activeWeek, onWeekPress, onImportP
 
 const styles = StyleSheet.create({
   row: {
-    paddingHorizontal: 12,
+    paddingHorizontal: 0,
     paddingTop: 4,
     paddingBottom: 10,
     gap: 8,      
