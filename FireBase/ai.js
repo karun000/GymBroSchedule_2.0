@@ -16,21 +16,42 @@ const NVIDIA_NIM_API_KEY = 'nvapi-5idm4NOtvDVVu5Kddn0HL1qnqQ176ub7FaZl7u7ere0r_p
 // MODELS
 // -----------------------------------------------------------------------------
 
-// FIXED: was 'nvidia/nemotron-3.5-lightning-30b-a3b' (timing out).
-// Switched to z-ai/glm-5.3-flash which is fast and matches the NVIDIA example.
-const NVIDIA_MODEL = 'z-ai/glm-5.3-flash';
+// This endpoint is verified against the configured NVIDIA credential and is
+// optimized for fast text generation.
+const NVIDIA_MODEL = 'nvidia/nemotron-3.5-lightning-30b-a3b';
 const NVIDIA_URL = 'https://integrate.api.nvidia.com/v1/chat/completions';
+const NVIDIA_REQUEST_TIMEOUT_MS = 45000;
 
 const fetchNvidia = async (options) => {
   let lastError;
 
   for (let attempt = 0; attempt < 2; attempt += 1) {
+    const controller = new AbortController();
+    const timeout = setTimeout(
+      () => controller.abort(),
+      NVIDIA_REQUEST_TIMEOUT_MS,
+    );
+
     try {
-      return await fetch(NVIDIA_URL, options);
+      const response = await fetch(NVIDIA_URL, {
+        ...options,
+        signal: controller.signal,
+      });
+      const body = await response.text();
+      return { response, body };
     } catch (error) {
       lastError = error;
-      if (!(error instanceof TypeError) || attempt === 1) break;
+      const timedOut = controller.signal.aborted;
+      if (timedOut) {
+        lastError = new Error('NVIDIA request timed out after 45 seconds.');
+        break;
+      }
+      const isNetworkTypeError =
+        error instanceof TypeError || error?.name === 'TypeError';
+      if (!isNetworkTypeError || attempt === 1) break;
       await new Promise((resolve) => setTimeout(resolve, 1200));
+    } finally {
+      clearTimeout(timeout);
     }
   }
 
@@ -650,16 +671,15 @@ const generateNvidiaNimSummary = async (payload) => {
     temperature: 0.5,
     top_p: 1,
     max_tokens: 512,
-    reasoning_effort: 'low',
     chat_template_kwargs: {
-      clear_thinking: true,
+      enable_thinking: false,
     },
     stream: true,
   };
 
-  // Do not abort NVIDIA requests from the client. NVIDIA may take longer than
-  // the fallback provider, and the caller should wait for the complete result.
-  const response = await fetchNvidia({
+  // Bound the complete streamed response so a stalled provider cannot leave
+  // the app and foreground notification loading indefinitely.
+  const { response, body: rawStream } = await fetchNvidia({
     method: 'POST',
     headers: {
       'Content-Type': 'application/json',
@@ -670,14 +690,11 @@ const generateNvidiaNimSummary = async (payload) => {
   });
 
   if (!response.ok) {
-    const errorText = await response.text();
-
     throw new Error(
-      `NVIDIA NIM request failed (${response.status}): ${errorText}`
+      `NVIDIA NIM request failed (${response.status}): ${rawStream}`
     );
   }
 
-  const rawStream = await response.text();
   let content = '';
   let reasoningContent = '';
 

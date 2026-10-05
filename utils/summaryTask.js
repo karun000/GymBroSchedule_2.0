@@ -10,6 +10,7 @@ import { generateFitnessSummary } from '../FireBase/ai';
 
 const CHANNEL_ID = 'gymbro-summary';
 const NOTIFICATION_ID = 'gymbro-summary-generation';
+const RESULT_NOTIFICATION_ID = 'gymbro-summary-result';
 const STATE_KEY = '@gymbro_summary_task_state';
 
 let currentTask = null;
@@ -21,7 +22,13 @@ const listeners = new Set();
 export const runSummaryForegroundService = () => {
   if (foregroundTaskCompleted) return Promise.resolve();
   return new Promise((resolve) => {
-    finishForegroundTask = resolve;
+    const complete = () => {
+      clearTimeout(safetyTimeout);
+      finishForegroundTask = null;
+      resolve();
+    };
+    const safetyTimeout = setTimeout(complete, 60000);
+    finishForegroundTask = complete;
   });
 };
 
@@ -37,7 +44,23 @@ export const subscribeToSummaryTask = (listener) => {
 export const getSummaryTaskState = async () => {
   try {
     const saved = await AsyncStorage.getItem(STATE_KEY);
-    return saved ? JSON.parse(saved) : { status: 'idle' };
+    const state = saved ? JSON.parse(saved) : { status: 'idle' };
+
+    // A persisted running state with no in-memory promise means the process
+    // ended before cleanup. Never leave the UI loading after an app restart.
+    if (state.status === 'running' && !currentTask) {
+      const recovered = {
+        status: 'failed',
+        error: 'The previous summary update was interrupted. Please try again.',
+      };
+      await AsyncStorage.setItem(STATE_KEY, JSON.stringify(recovered));
+      if (Platform.OS === 'android') {
+        try { await notifee.stopForegroundService(); } catch { /* already stopped */ }
+      }
+      return recovered;
+    }
+
+    return state;
   } catch {
     return { status: 'idle' };
   }
@@ -75,7 +98,7 @@ const ensureNotifications = async () => {
 };
 
 const notification = (title, body, ongoing = true) => ({
-  id: NOTIFICATION_ID,
+  id: ongoing ? NOTIFICATION_ID : RESULT_NOTIFICATION_ID,
   title,
   body,
   android: {
