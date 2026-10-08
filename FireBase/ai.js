@@ -741,6 +741,7 @@ const generateNvidiaNimSummary = async (payload) => {
 export const generateFitnessSummary = async ({
   goal = 'maintain',
   forceRefresh = false,
+  onAIRequestStart,
 } = {}) => {
   const userId = auth.currentUser?.uid;
   if (!userId) throw new Error('Sign in to view your summary.');
@@ -937,6 +938,7 @@ export const generateFitnessSummary = async ({
         prs: prRecords,
         measurements: measurementRecords,
       }, async () => {
+        await onAIRequestStart?.();
         const result = await generateNvidiaNimSummary(aiPayload);
         if (!isValidSummaryShape(result) || isPlaceholderResult(result)) {
           throw new Error('NVIDIA returned an invalid summary.');

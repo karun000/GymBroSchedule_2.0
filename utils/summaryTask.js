@@ -7,6 +7,7 @@ import notifee, {
 } from '@notifee/react-native';
 import { Platform } from 'react-native';
 import { generateFitnessSummary } from '../FireBase/ai';
+import { consumeMeasurementChanged } from './measurementChange';
 
 const CHANNEL_ID = 'gymbro-summary';
 const NOTIFICATION_ID = 'gymbro-summary-generation';
@@ -114,32 +115,56 @@ const notification = (title, body, ongoing = true) => ({
   ios: { sound: ongoing ? undefined : 'default' },
 });
 
-export const startSummaryTask = async ({ goal, forceRefresh = false }) => {
+export const startSummaryTask = async ({
+  goal,
+  forceRefresh = false,
+}) => {
   if (currentTask) return currentTask;
 
   currentTask = (async () => {
-    foregroundTaskCompleted = false;
+    let notificationStarted = false;
     try {
-      await ensureNotifications();
-      const started = { status: 'running', startedAt: new Date().toISOString() };
-      await saveState(started);
-      await notifee.displayNotification(notification('GymBro', 'Updating your fitness summary…'));
-
       // Keep the existing API call and arguments unchanged.
-      const result = await generateFitnessSummary({ goal, forceRefresh });
+      const result = await generateFitnessSummary({
+        goal,
+        forceRefresh,
+        onAIRequestStart: async () => {
+          const measurementChanged = await consumeMeasurementChanged();
+          if (!measurementChanged) return;
+
+          foregroundTaskCompleted = false;
+          await ensureNotifications();
+          await saveState({
+            status: 'running',
+            startedAt: new Date().toISOString(),
+          });
+          await notifee.displayNotification(
+            notification('GymBro', 'Updating your fitness summary…'),
+          );
+          notificationStarted = true;
+        },
+      });
       const completed = {
         status: 'completed',
         completedAt: new Date().toISOString(),
         result,
       };
       await saveState(completed);
-      await notifee.displayNotification(notification('GymBro', 'Your fitness summary is ready.', false));
+      if (notificationStarted) {
+        await notifee.displayNotification(
+          notification('GymBro', 'Your fitness summary is ready.', false),
+        );
+      }
       return result;
     } catch (error) {
       await saveState({ status: 'failed', error: error?.message || 'Unable to update your summary.' });
-      try {
-        await notifee.displayNotification(notification('GymBro', 'Could not update your fitness summary.', false));
-      } catch { /* notification setup may be the failed operation */ }
+      if (notificationStarted) {
+        try {
+          await notifee.displayNotification(
+            notification('GymBro', 'Could not update your fitness summary.', false),
+          );
+        } catch { /* notification setup may be the failed operation */ }
+      }
       throw error;
     } finally {
       if (Platform.OS === 'android') {

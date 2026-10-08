@@ -268,10 +268,6 @@ export default function HomeScreen() {
   const [weights,      setWeights]      = useState([]);
   const [refreshing,   setRefreshing]   = useState(false);
 
-  // Bumped on every pull-to-refresh so AISummaryCard knows to bypass its
-  // server-side cache and regenerate instead of just re-reading the cache.
-  const [summaryRefreshTrigger, setSummaryRefreshTrigger] = useState(0);
-
   // Derived from state – used for rendering only.
   const visibleWeekOptions = useMemo(() => getVisibleWeeks(weekCards), [weekCards]);
   const visibleWeekKey     = useMemo(
@@ -320,8 +316,6 @@ export default function HomeScreen() {
 
     try {
       await loadHomeData(isActiveRef, true);
-      // Force the AI summary to regenerate against the freshly-pulled data.
-      setSummaryRefreshTrigger((prev) => prev + 1);
     } finally {
       setRefreshing(false);
     }
@@ -422,7 +416,6 @@ export default function HomeScreen() {
         {/* ③.5 AI Summary */}
         <AISummaryCard
           todayExerciseCount={todayExerciseCount}
-          refreshTrigger={summaryRefreshTrigger}
           onViewInsights={handleViewInsights}
         />
 

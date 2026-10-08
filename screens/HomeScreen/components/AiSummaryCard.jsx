@@ -66,7 +66,10 @@ const AiSummaryCard = ({ refreshTrigger = 0 }) => {
     }
   }, [loaded, goal]);
 
-  const loadSummary = async (selectedGoalValue, forceRefresh = false) => {
+  const loadSummary = async (
+    selectedGoalValue,
+    forceRefresh = false,
+  ) => {
     if (!selectedGoalValue) return;
     const requestId = ++requestRef.current;
     setLoading(true);
@@ -99,7 +102,9 @@ const AiSummaryCard = ({ refreshTrigger = 0 }) => {
       if (state.result) setSummary(state.result);
       if (state.status === 'failed') setError(state.error || 'Unable to generate your fitness summary.');
     });
-    if (goal && isFocused) loadSummary(goal, refreshTrigger > 0);
+    if (goal && isFocused) {
+      loadSummary(goal, refreshTrigger > 0);
+    }
     return () => { active = false; requestRef.current += 1; unsubscribe(); };
   }, [goal, refreshTrigger, isFocused]);
 

@@ -1,6 +1,7 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { collection, doc, getDoc, getDocs, setDoc, updateDoc, deleteDoc } from 'firebase/firestore';
 import { auth, getDb } from './firebase';
+import { markMeasurementChanged } from '../utils/measurementChange';
 
 const RECORD_CACHE_PREFIX = '@gymbro/record-cache';
 const PENDING_MUTATIONS_PREFIX = '@gymbro/pending-record-mutations';
@@ -447,6 +448,7 @@ export const saveMeasurementRecord = async (measurement) => {
   });
 
   triggerPendingMutationSync();
+  await markMeasurementChanged();
 
   return recordRef;
 };
@@ -471,6 +473,7 @@ export const updateMeasurementRecord = async (recordId, measurement) => {
   });
 
   triggerPendingMutationSync();
+  await markMeasurementChanged();
 };
 
 export const deleteMeasurementRecord = async (recordId) => {
@@ -485,6 +488,7 @@ export const deleteMeasurementRecord = async (recordId) => {
   });
 
   triggerPendingMutationSync();
+  await markMeasurementChanged();
 };
 
 export const savePrRecord = async (pr) => {
